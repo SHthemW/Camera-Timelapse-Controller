@@ -82,12 +82,15 @@ def capture_aeb_round(
     shots_to_take: int,
     *,
     dry_run: bool,
+    camera_folder: str | None = None,
 ) -> CapturedFiles:
     if dry_run:
         captured_files = capture_aeb_dry_run(shots_to_take)
         return captured_files[-shots_to_take:]
 
-    camera_folder = latest_dcim_folder(gphoto, dry_run=False)
+    if camera_folder is None:
+        camera_folder = latest_dcim_folder(gphoto, dry_run=False)
+
     download_temp_dir = Path.cwd() / ".download_tmp"
     download_temp_dir.mkdir(parents=True, exist_ok=True)
 

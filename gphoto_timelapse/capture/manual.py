@@ -63,6 +63,7 @@ def capture_manual_round(
     choices: list[str],
     *,
     dry_run: bool,
+    camera_folder: str | None = None,
 ) -> CapturedFiles:
     if dry_run:
         captured_files: CapturedFiles = []
@@ -74,11 +75,13 @@ def capture_manual_round(
         )
         return captured_files
 
+    if camera_folder is None:
+        camera_folder = latest_dcim_folder(gphoto, dry_run=False)
+
     download_temp_dir = Path.cwd() / ".download_tmp"
     download_temp_dir.mkdir(parents=True, exist_ok=True)
 
     with GPhotoShellSession(gphoto, download_temp_dir) as shell:
-        camera_folder = latest_dcim_folder(gphoto, dry_run=False)
         return capture_manual_round_in_shell(shell, exposure_config, choices, camera_folder)
 
 

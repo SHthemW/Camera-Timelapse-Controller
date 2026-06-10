@@ -179,6 +179,7 @@ def capture_single_round(
     args: argparse.Namespace,
     exposure_config: str | None,
     choices: list[str] | None,
+    camera_folder: str | None = None,
 ) -> list[tuple[str, str]] | list[tuple[int, str, str]]:
     if args.mode == "aeb":
         current_index = read_aeb_current_index(args.gphoto, dry_run=args.dry_run)
@@ -190,7 +191,12 @@ def capture_single_round(
             )
         else:
             log("Starting a fresh AEB round")
-        return capture_aeb_round(args.gphoto, shots_to_take, dry_run=args.dry_run)
+        return capture_aeb_round(
+            args.gphoto,
+            shots_to_take,
+            dry_run=args.dry_run,
+            camera_folder=camera_folder,
+        )
 
     if exposure_config is None or choices is None:
         raise GPhotoError("Manual mode exposure configuration was not prepared.")
@@ -200,6 +206,7 @@ def capture_single_round(
         exposure_config,
         choices,
         dry_run=args.dry_run,
+        camera_folder=camera_folder,
     )
 
 
@@ -209,6 +216,7 @@ def capture_all_rounds(
     start_group: int,
     exposure_config: str | None,
     choices: list[str] | None,
+    camera_folder: str | None = None,
 ) -> list[list[tuple[str, str]] | list[tuple[int, str, str]]]:
     captured_rounds: list[list[tuple[str, str]] | list[tuple[int, str, str]]] = []
     completed_rounds = 0
@@ -216,7 +224,7 @@ def capture_all_rounds(
     while total_rounds is None or completed_rounds < total_rounds:
         round_number = start_group + completed_rounds
         log(f"Starting capture round {round_number:04d}")
-        captured_rounds.append(capture_single_round(args, exposure_config, choices))
+        captured_rounds.append(capture_single_round(args, exposure_config, choices, camera_folder))
         completed_rounds += 1
 
         if total_rounds is not None and completed_rounds >= total_rounds:
@@ -282,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
             with suppress_ptpcamerad():
                 exposure_config: str | None = None
                 choices: list[str] | None = None
+                camera_folder: str | None = None
                 if args.mode == "manual":
                     exposure_config, choices = prepare_manual_context(args)
 
@@ -290,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
                     round_number = start_group + completed_rounds
                     log(f"Starting capture round {round_number:04d}")
                     captured_rounds = [
-                        capture_single_round(args, exposure_config, choices)
+                        capture_single_round(args, exposure_config, choices, camera_folder)
                     ]
                     download_all_rounds(args, output_dir, round_number, captured_rounds)
                     completed_rounds += 1
@@ -315,14 +324,17 @@ def main(argv: list[str] | None = None) -> int:
         with suppress_ptpcamerad():
             exposure_config: str | None = None
             choices: list[str] | None = None
+            camera_folder: str | None = None
             if args.mode == "manual":
                 exposure_config, choices = prepare_manual_context(args)
+            if not args.dry_run:
+                camera_folder = latest_dcim_folder(args.gphoto, dry_run=False)
             completed_rounds = 0
             while args.round_count is None or completed_rounds < args.round_count:
                 round_number = start_group + completed_rounds
                 log(f"Starting capture round {round_number:04d}")
                 captured_rounds = [
-                    capture_single_round(args, exposure_config, choices)
+                    capture_single_round(args, exposure_config, choices, camera_folder)
                 ]
                 download_all_rounds(args, output_dir, round_number, captured_rounds)
                 completed_rounds += 1
