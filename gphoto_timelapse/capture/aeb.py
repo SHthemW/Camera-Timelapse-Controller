@@ -11,14 +11,17 @@ from gphoto_timelapse.camera.config import (
 from gphoto_timelapse.capture.common import (
     destination_for_capture,
     download_camera_file,
-    download_camera_file_in_shell,
     next_group_number,
     remove_empty_temp_dir,
 )
 from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
 from gphoto_timelapse.core.log import current_timestamp, log
 from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
-from gphoto_timelapse.parsing import format_camera_files, parse_camera_files, parse_list_files
+from gphoto_timelapse.parsing import format_camera_files, parse_camera_files
+
+
+CapturedFiles = list[tuple[str, str]]
+CapturedRounds = list[CapturedFiles]
 
 
 def capture_aeb_bracket(
@@ -46,10 +49,18 @@ def capture_aeb_bracket(
     else:
         log("Starting a fresh AEB round")
 
-    if dry_run:
-        capture_aeb_dry_run(gphoto, output_dir, group, shots_to_take)
-    else:
-        capture_aeb_files(gphoto, output_dir, group, shots_to_take)
+    captured_files = capture_aeb_round(
+        gphoto,
+        shots_to_take,
+        dry_run=dry_run,
+    )
+    download_aeb_rounds(
+        gphoto,
+        output_dir,
+        group,
+        [captured_files],
+        dry_run=dry_run,
+    )
 
     if not dry_run:
         post_current_index = read_aeb_current_index(gphoto, dry_run=False)
@@ -66,12 +77,87 @@ def capture_aeb_bracket(
     )
 
 
-def capture_aeb_dry_run(
+def capture_aeb_round(
+    gphoto: str,
+    shots_to_take: int,
+    *,
+    dry_run: bool,
+) -> CapturedFiles:
+    if dry_run:
+        captured_files = capture_aeb_dry_run(shots_to_take)
+        return captured_files[-shots_to_take:]
+
+    camera_folder = latest_dcim_folder(gphoto, dry_run=False)
+    download_temp_dir = Path.cwd() / ".download_tmp"
+    download_temp_dir.mkdir(parents=True, exist_ok=True)
+
+    with GPhotoShellSession(gphoto, download_temp_dir) as shell:
+        return capture_aeb_round_in_shell(shell, shots_to_take, camera_folder)
+
+
+def capture_aeb_round_in_shell(
+    shell: GPhotoShellSession,
+    shots_to_take: int,
+    camera_folder: str,
+) -> CapturedFiles:
+    shell.run(f"cd {camera_folder}")
+    local_dir = shell.working_dir
+    captured_files: CapturedFiles = []
+
+    for shot_index in range(1, shots_to_take + 1):
+        log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
+        before = {path.name for path in local_dir.iterdir() if path.is_file()}
+        output = shell.run("capture-image-and-download")
+        shot_files = parse_camera_files(output)
+        if shot_files:
+            log(f"Captured AEB file path(s): {format_camera_files(shot_files)}")
+        else:
+            log(
+                f"AEB shot {shot_index}/{shots_to_take} completed without a file path in output",
+                level="warn",
+            )
+        after = sorted(
+            path for path in local_dir.iterdir() if path.is_file() and path.name not in before
+        )
+        if len(after) != 1:
+            raise GPhotoError(
+                f"AEB shot {shot_index}/{shots_to_take} downloaded {len(after)} local file(s), "
+                "expected exactly 1."
+            )
+        captured_files.append((str(local_dir), after[0].name))
+
+    return captured_files
+
+
+def download_aeb_rounds(
     gphoto: str,
     output_dir: Path,
-    group: int,
-    shots_to_take: int,
-) -> list[tuple[str, str]]:
+    start_group: int,
+    captured_rounds: CapturedRounds,
+    *,
+    dry_run: bool,
+) -> None:
+    if dry_run:
+        for group_offset, selected_files in enumerate(captured_rounds):
+            group = start_group + group_offset
+            for index, (folder, camera_file) in enumerate(selected_files, start=1):
+                destination = destination_for_capture(output_dir, group, index, camera_file)
+                download_camera_file(gphoto, folder, camera_file, destination, dry_run=True)
+        return
+
+    local_dirs: set[Path] = set()
+    for group_offset, selected_files in enumerate(captured_rounds):
+        group = start_group + group_offset
+        for index, (folder, camera_file) in enumerate(selected_files, start=1):
+            destination = destination_for_capture(output_dir, group, index, camera_file)
+            download_camera_file(gphoto, folder, camera_file, destination, dry_run=False)
+            local_dirs.add(Path(folder))
+
+    for local_dir in local_dirs:
+        remove_empty_temp_dir(local_dir)
+
+
+def capture_aeb_dry_run(shots_to_take: int) -> CapturedFiles:
     for shot_index in range(1, shots_to_take + 1):
         log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
 
@@ -81,94 +167,4 @@ def capture_aeb_dry_run(
         ("/store_00010001/DCIM/172NZ_30", "dry-run-aeb-3.jpg"),
     ]
     log(f"Using captured AEB file paths: {format_camera_files(selected_files)}")
-
-    for index, (folder, camera_file) in enumerate(selected_files, start=1):
-        destination = destination_for_capture(output_dir, group, index, camera_file)
-        download_camera_file(
-            gphoto,
-            folder,
-            camera_file,
-            destination,
-            dry_run=True,
-        )
-
-    return selected_files
-
-
-def capture_aeb_files(
-    gphoto: str,
-    output_dir: Path,
-    group: int,
-    shots_to_take: int,
-) -> list[tuple[str, str]]:
-    download_temp_dir = output_dir / ".download_tmp"
-    download_temp_dir.mkdir(parents=True, exist_ok=True)
-
-    captured_files: list[tuple[str, str]] = []
-    downloaded_in_shell = False
-    selected_files: list[tuple[str, str]] = []
-
-    with GPhotoShellSession(gphoto, download_temp_dir) as shell:
-        for shot_index in range(1, shots_to_take + 1):
-            log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
-            output = shell.run("capture-image")
-            shot_files = parse_camera_files(output)
-            captured_files.extend(shot_files)
-            if shot_files:
-                log(f"Captured AEB file path(s): {format_camera_files(shot_files)}")
-            else:
-                log(
-                    f"AEB shot {shot_index}/{shots_to_take} completed without a file path in output",
-                    level="warn",
-                )
-
-        if len(captured_files) >= AEB_SHOT_COUNT:
-            selected_files = captured_files[-AEB_SHOT_COUNT:]
-            log(f"Using captured AEB file paths: {format_camera_files(selected_files)}")
-            for index, (folder, camera_file) in enumerate(selected_files, start=1):
-                destination = destination_for_capture(output_dir, group, index, camera_file)
-                download_camera_file_in_shell(shell, folder, camera_file, destination)
-            downloaded_in_shell = True
-
-    remove_empty_temp_dir(download_temp_dir)
-
-    if downloaded_in_shell:
-        return selected_files
-
-    return download_latest_aeb_files(gphoto, output_dir, group)
-
-
-def download_latest_aeb_files(
-    gphoto: str,
-    output_dir: Path,
-    group: int,
-) -> list[tuple[str, str]]:
-    log("Capture output did not list all AEB files; falling back to camera folder scan", level="warn")
-    folder = latest_dcim_folder(gphoto, dry_run=False)
-    log(f"Inspecting camera folder: {folder}")
-    output = run_gphoto(
-        gphoto,
-        ["--folder", folder, "--list-files"],
-        dry_run=False,
-    )
-    folder, camera_files = parse_list_files(output)
-    if len(camera_files) < AEB_SHOT_COUNT:
-        raise GPhotoError(
-            f"AEB capture produced {len(camera_files)} visible file(s), "
-            f"expected at least {AEB_SHOT_COUNT}."
-        )
-
-    selected_files = [(folder, camera_file) for camera_file in camera_files[-AEB_SHOT_COUNT:]]
-    log(f"Selected latest AEB files from {folder}: {', '.join(camera_files[-AEB_SHOT_COUNT:])}")
-
-    for index, (folder, camera_file) in enumerate(selected_files, start=1):
-        destination = destination_for_capture(output_dir, group, index, camera_file)
-        download_camera_file(
-            gphoto,
-            folder,
-            camera_file,
-            destination,
-            dry_run=False,
-        )
-
     return selected_files

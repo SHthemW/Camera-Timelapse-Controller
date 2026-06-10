@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from gphoto_timelapse.core.constants import AEB_SHOT_COUNT, DEFAULT_CONFIG_CANDIDATES
-from gphoto_timelapse.gphoto import GPhotoError, run_gphoto
+from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
 
 
 def find_exposure_config(gphoto: str, override: str | None, *, dry_run: bool) -> str:
@@ -41,6 +41,15 @@ def read_aeb_current_index(gphoto: str, *, dry_run: bool) -> int:
         return 1
 
     output = run_gphoto(gphoto, ["--get-config", "/main/other/d0c3"], dry_run=dry_run)
+    return parse_aeb_current_index(output)
+
+
+def read_aeb_current_index_in_shell(shell: GPhotoShellSession) -> int:
+    output = shell.run("get-config /main/other/d0c3")
+    return parse_aeb_current_index(output)
+
+
+def parse_aeb_current_index(output: str) -> int:
     match = re.search(r"Current:\s+(\d+)", output)
     if not match:
         raise GPhotoError(f"Could not read AEB current shot index from gPhoto2 output:\n{output}")
