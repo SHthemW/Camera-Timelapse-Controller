@@ -9,10 +9,12 @@ image at each setting, and downloads the files into ./capture next to this file.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -30,12 +32,22 @@ class GPhotoError(RuntimeError):
     """Raised when a gPhoto2 command fails or camera settings are unsupported."""
 
 
+def current_timestamp() -> str:
+    return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def log(message: str, *, file=None) -> None:
+    if file is None:
+        file = sys.stdout
+    print(f"[{current_timestamp()}] {message}", file=file)
+
+
 def run_gphoto(gphoto: str, args: list[str], *, dry_run: bool = False) -> str:
     command = [gphoto, *args]
     printable = " ".join(command)
 
     if dry_run:
-        print(f"[dry-run] {printable}")
+        log(f"[dry-run] {printable}")
         return ""
 
     completed = subprocess.run(
@@ -168,16 +180,20 @@ def capture_bracket(
     config_output = run_gphoto(gphoto, ["--get-config", exposure_config], dry_run=dry_run)
     choices = parse_choices(config_output)
     group = next_group_number(output_dir)
+    group_started_at = current_timestamp()
+    group_started = time.monotonic()
+
+    log(f"Starting group {group:04d}")
 
     for index, ev in enumerate(BRACKET_STOPS, start=1):
         value = choice_for_ev(choices, ev)
         stem = f"{group:04d}_{index:02d}"
         filename = str(output_dir / f"{stem}.%C")
 
-        print(f"Setting exposure compensation to {format_ev(ev)} EV")
+        log(f"Setting exposure compensation to {format_ev(ev)} EV")
         run_gphoto(gphoto, ["--set-config", f"{exposure_config}={value}"], dry_run=dry_run)
 
-        print(f"Capturing {filename}")
+        log(f"Capturing {filename}")
         run_gphoto(
             gphoto,
             [
@@ -188,6 +204,12 @@ def capture_bracket(
             ],
             dry_run=dry_run,
         )
+
+    elapsed = time.monotonic() - group_started
+    log(
+        f"Finished group {group:04d}; capture time: {elapsed:.1f} seconds; "
+        f"started at {group_started_at}; finished at {current_timestamp()}"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -223,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.dry_run and shutil.which(args.gphoto) is None and not Path(args.gphoto).exists():
-        print(
+        log(
             "gphoto2 was not found. Install gPhoto2 and make sure it is available in PATH, "
             "or pass --gphoto /path/to/gphoto2.",
             file=sys.stderr,
@@ -232,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         exposure_config = find_exposure_config(args.gphoto, args.config, dry_run=args.dry_run)
-        print(f"Using exposure compensation config: {exposure_config}")
+        log(f"Using exposure compensation config: {exposure_config}")
         capture_bracket(
             args.gphoto,
             args.output_dir.resolve(),
@@ -240,10 +262,10 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
         )
     except GPhotoError as exc:
-        print(str(exc), file=sys.stderr)
+        log(str(exc), file=sys.stderr)
         return 1
 
-    print(f"Done. Files downloaded to: {args.output_dir.resolve()}")
+    log(f"Done. Files downloaded to: {args.output_dir.resolve()}")
     return 0
 
 
