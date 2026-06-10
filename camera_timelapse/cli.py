@@ -25,6 +25,7 @@ from camera_timelapse.capture.timing import (
 )
 from camera_timelapse.core.constants import AEB_SHOT_COUNT
 from camera_timelapse.core.log import log
+from camera_timelapse.core.schedule import parse_start_time, wait_until_start_time
 from camera_timelapse.capture.session import run_capture_and_download_session
 from camera_timelapse.gphoto import GPhotoError, run_gphoto
 from camera_timelapse.parsing import parse_choices
@@ -67,6 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Seconds between capture round starts. Time spent capturing and downloading "
             "counts toward the interval. Use 0 for no delay."
+        ),
+    )
+    parser.add_argument(
+        "--start-at",
+        type=parse_start_time,
+        metavar="HH:MM",
+        help=(
+            "Wait until today's 24-hour HH:MM time before starting capture. "
+            "Omit to start immediately."
         ),
     )
     parser.add_argument(
@@ -156,6 +166,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     validate_args(parser, args)
     args.round_count = maybe_prompt_round_count(args.round_count)
+
+    try:
+        wait_until_start_time(args.start_at)
+    except KeyboardInterrupt:
+        log("Interrupted by user", level="warn", file=sys.stderr)
+        return 130
 
     if not args.dry_run and shutil.which(args.gphoto) is None and not Path(args.gphoto).exists():
         log(

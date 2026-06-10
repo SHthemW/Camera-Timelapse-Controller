@@ -65,6 +65,15 @@ Capture forever until interrupted:
 camera-timelapse --interval 10
 ```
 
+Wait until today's 21:30 before starting capture:
+
+```bash
+camera-timelapse --start-at 21:30 --interval 5 --round 100
+```
+
+If the time has already passed for today, the program logs a warning and starts
+immediately.
+
 Write files to a custom directory:
 
 ```bash
@@ -156,6 +165,7 @@ continues from the highest existing group.
 --gphoto PATH             Path to the gphoto2 executable.
 --dry-run                 Print commands without controlling a camera.
 --interval SECONDS        Seconds between capture round starts.
+--start-at HH:MM          Wait until today's 24-hour start time.
 --round COUNT             Total capture rounds. Omit to capture forever.
 ```
 
