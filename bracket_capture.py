@@ -358,6 +358,38 @@ def download_camera_file(
     )
 
 
+def camera_path(folder: str, camera_file: str) -> str:
+    if folder == "/":
+        return f"/{camera_file}"
+    return f"{folder.rstrip('/')}/{camera_file}"
+
+
+def format_camera_files(camera_files: list[tuple[str, str]]) -> str:
+    return ", ".join(camera_path(folder, camera_file) for folder, camera_file in camera_files)
+
+
+def download_camera_file_in_shell(
+    shell: GPhotoShellSession,
+    folder: str,
+    camera_file: str,
+    destination: Path,
+) -> None:
+    source = camera_path(folder, camera_file)
+    temporary_file = shell.working_dir / Path(camera_file).name
+
+    if temporary_file.exists():
+        temporary_file.unlink()
+
+    log(f"Downloading {source} to {destination}")
+    shell.run(f"get {source}")
+
+    if not temporary_file.exists():
+        raise GPhotoError(f"Downloaded file was not found locally: {temporary_file}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_file.replace(destination)
+
+
 def read_storage_basedir(gphoto: str, *, dry_run: bool) -> str:
     if dry_run:
         return "/store_00010001"
@@ -447,56 +479,90 @@ def capture_aeb_bracket(
     else:
         log("Starting a fresh AEB round")
 
+    selected_files: list[tuple[str, str]]
+
     if dry_run:
         for shot_index in range(1, shots_to_take + 1):
             log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
+        selected_files = [
+            ("/store_00010001/DCIM/172NZ_30", "dry-run-aeb-1.jpg"),
+            ("/store_00010001/DCIM/172NZ_30", "dry-run-aeb-2.jpg"),
+            ("/store_00010001/DCIM/172NZ_30", "dry-run-aeb-3.jpg"),
+        ]
     else:
         download_temp_dir = output_dir / ".download_tmp"
         download_temp_dir.mkdir(parents=True, exist_ok=True)
 
+        captured_files: list[tuple[str, str]] = []
+        downloaded_in_shell = False
+
         with GPhotoShellSession(gphoto, download_temp_dir) as shell:
             for shot_index in range(1, shots_to_take + 1):
                 log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
-                shell.run("capture-image")
+                output = shell.run("capture-image")
+                shot_files = parse_camera_files(output)
+                captured_files.extend(shot_files)
+                if shot_files:
+                    log(f"Captured AEB file path(s): {format_camera_files(shot_files)}")
+                else:
+                    log(f"AEB shot {shot_index}/{shots_to_take} completed without a file path in output")
+
+            if len(captured_files) >= AEB_SHOT_COUNT:
+                selected_files = captured_files[-AEB_SHOT_COUNT:]
+                log(f"Using captured AEB file paths: {format_camera_files(selected_files)}")
+                for index, (folder, camera_file) in enumerate(selected_files, start=1):
+                    destination = destination_for_capture(output_dir, group, index, camera_file)
+                    download_camera_file_in_shell(shell, folder, camera_file, destination)
+                downloaded_in_shell = True
+            else:
+                selected_files = []
 
         try:
             download_temp_dir.rmdir()
         except OSError:
             pass
 
+        if not downloaded_in_shell:
+            log("Capture output did not list all AEB files; falling back to camera folder scan")
+            folder = latest_dcim_folder(gphoto, dry_run=False)
+            log(f"Inspecting camera folder: {folder}")
+            output = run_gphoto(
+                gphoto,
+                ["--folder", folder, "--list-files"],
+                dry_run=False,
+            )
+            folder, camera_files = parse_list_files(output)
+            if len(camera_files) < AEB_SHOT_COUNT:
+                raise GPhotoError(
+                    f"AEB capture produced {len(camera_files)} visible file(s), "
+                    f"expected at least {AEB_SHOT_COUNT}."
+                )
+            selected_files = [
+                (folder, camera_file) for camera_file in camera_files[-AEB_SHOT_COUNT:]
+            ]
+            log(f"Selected latest AEB files from {folder}: {', '.join(camera_files[-AEB_SHOT_COUNT:])}")
+
+            for index, (folder, camera_file) in enumerate(selected_files, start=1):
+                destination = destination_for_capture(output_dir, group, index, camera_file)
+                download_camera_file(
+                    gphoto,
+                    folder,
+                    camera_file,
+                    destination,
+                    dry_run=False,
+                )
+
     if dry_run:
-        folder, camera_files = "/store_00010001/DCIM/172NZ_30", [
-            "dry-run-aeb-1.jpg",
-            "dry-run-aeb-2.jpg",
-            "dry-run-aeb-3.jpg",
-        ]
-    else:
-        folder = latest_dcim_folder(gphoto, dry_run=dry_run)
-        log(f"Inspecting camera folder: {folder}")
-        output = run_gphoto(
-            gphoto,
-            ["--folder", folder, "--list-files"],
-            dry_run=dry_run,
-        )
-        folder, camera_files = parse_list_files(output)
-
-    if len(camera_files) < 3:
-        raise GPhotoError(
-            f"AEB capture produced {len(camera_files)} visible file(s), expected at least 3."
-        )
-
-    selected_files = camera_files[-3:]
-    log(f"Selected latest AEB files from {folder}: {', '.join(selected_files)}")
-
-    for index, camera_file in enumerate(selected_files, start=1):
-        destination = destination_for_capture(output_dir, group, index, camera_file)
-        download_camera_file(
-            gphoto,
-            folder,
-            camera_file,
-            destination,
-            dry_run=dry_run,
-        )
+        log(f"Using captured AEB file paths: {format_camera_files(selected_files)}")
+        for index, (folder, camera_file) in enumerate(selected_files, start=1):
+            destination = destination_for_capture(output_dir, group, index, camera_file)
+            download_camera_file(
+                gphoto,
+                folder,
+                camera_file,
+                destination,
+                dry_run=dry_run,
+            )
 
     if not dry_run:
         post_current_index = read_aeb_current_index(gphoto, dry_run=False)
