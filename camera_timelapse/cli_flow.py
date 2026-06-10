@@ -40,6 +40,32 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
         log("--round was provided, so --end-at will be ignored.", level="warn", file=sys.stderr)
 
 
+def resolve_output_dir(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Path:
+    positional_output_dir = getattr(args, "output_dir", None)
+    flag_output_dir = getattr(args, "output_dir_flag", None)
+
+    if positional_output_dir is not None and flag_output_dir is not None:
+        if positional_output_dir.resolve() != flag_output_dir.resolve():
+            parser.error("Provide output directory either positionally or with --output-dir, not both.")
+        return flag_output_dir.resolve()
+
+    if flag_output_dir is not None:
+        return flag_output_dir.resolve()
+
+    if positional_output_dir is not None:
+        return positional_output_dir.resolve()
+
+    if not sys.stdin.isatty():
+        parser.error("Output directory is required. Pass one positionally or run interactively to be prompted.")
+
+    while True:
+        answer = input("请输入输出目录（例如 .）: ").strip()
+        if not answer:
+            print("请输入有效的输出目录。")
+            continue
+        return Path(answer).expanduser().resolve()
+
+
 def maybe_prompt_round_count(round_count: int | None) -> int | None:
     if round_count is not None:
         return round_count

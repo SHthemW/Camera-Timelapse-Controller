@@ -15,6 +15,7 @@ from camera_timelapse.core.schedule import (
 from camera_timelapse.core.log import log
 from camera_timelapse.cli_flow import (
     maybe_prompt_round_count,
+    resolve_output_dir,
     run_dry_run_session,
     run_standard_session,
     validate_args,
@@ -27,16 +28,22 @@ def build_parser() -> argparse.ArgumentParser:
         description="Capture +1 EV, 0 EV, and -1 EV photos through gPhoto2."
     )
     parser.add_argument(
+        "output_dir",
+        nargs="?",
+        type=Path,
+        help="Download directory. Example: .",
+    )
+    parser.add_argument(
+        "--output-dir",
+        dest="output_dir_flag",
+        type=Path,
+        help="Download directory. Use this instead of the positional path if preferred.",
+    )
+    parser.add_argument(
         "--mode",
         choices=("aeb", "manual"),
         default="aeb",
         help="Capture mode. Defaults to camera AEB; use manual for per-shot EV changes.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("capture"),
-        help="Download directory. Defaults to ./capture in the current working directory.",
     )
     parser.add_argument(
         "--config",
@@ -102,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    output_dir = resolve_output_dir(parser, args)
+
     try:
         wait_until_start_time(args.start_at)
     except KeyboardInterrupt:
@@ -125,7 +134,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 127
 
-    output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     start_group = next_group_number(output_dir)
 
@@ -141,5 +149,5 @@ def main(argv: list[str] | None = None) -> int:
         log(str(exc), level="error", file=sys.stderr)
         return 1
 
-    log(f"Done. Files downloaded to: {args.output_dir.resolve()}")
+    log(f"Done. Files downloaded to: {output_dir.resolve()}")
     return 0

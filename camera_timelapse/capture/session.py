@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime as dt
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Union
 
@@ -38,7 +37,8 @@ def run_capture_and_download_session(
     choices: list[str] | None,
     end_at: dt.time | None,
 ) -> list[CapturedRound]:
-    download_temp_dir = Path(tempfile.mkdtemp(prefix="camera_timelapse_download_"))
+    download_temp_dir = output_dir / ".download_tmp"
+    download_temp_dir.mkdir(parents=True, exist_ok=True)
 
     captured_rounds: list[CapturedRound] = []
 

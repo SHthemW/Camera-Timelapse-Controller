@@ -56,13 +56,13 @@ If your system pip is old, run this inside a virtual environment after upgrading
 Capture two bracket rounds with a 5-second interval between round starts:
 
 ```bash
-camera-timelapse --interval 5 --round 2
+camera-timelapse . --interval 5 --round 2
 ```
 
 Capture forever until interrupted:
 
 ```bash
-camera-timelapse --interval 10
+camera-timelapse . --interval 10
 ```
 
 Wait until today's 21:30 before starting capture:
@@ -85,20 +85,22 @@ If `--round` is also set, `--round` wins and `--end-at` is ignored with a warnin
 Write files to a custom directory:
 
 ```bash
-camera-timelapse --output-dir ./capture --interval 6 --round 100
+camera-timelapse ./capture --interval 6 --round 100
 ```
 
 Preview the flow without talking to a camera:
 
 ```bash
-camera-timelapse --dry-run --interval 5 --round 2
+camera-timelapse . --dry-run --interval 5 --round 2
 ```
 
 The legacy script entry point still works:
 
 ```bash
-python3 /path/to/Camera-Timelapse-Controller/bracket_capture.py --interval 5 --round 2
+python3 /path/to/Camera-Timelapse-Controller/bracket_capture.py . --interval 5 --round 2
 ```
+
+If you omit the directory, the program asks for it at runtime.
 
 ## Capture Modes
 
@@ -107,7 +109,7 @@ python3 /path/to/Camera-Timelapse-Controller/bracket_capture.py --interval 5 --r
 AEB mode is the default:
 
 ```bash
-camera-timelapse --mode aeb --interval 5 --round 10
+camera-timelapse . --mode aeb --interval 5 --round 10
 ```
 
 The tool reads the camera's current AEB shot index and finishes the current
@@ -119,14 +121,14 @@ the tool captures only the shots needed to complete that group.
 Manual mode changes exposure compensation before each shot:
 
 ```bash
-camera-timelapse --mode manual --interval 5 --round 10
+camera-timelapse . --mode manual --interval 5 --round 10
 ```
 
 If the exposure compensation setting cannot be detected automatically, pass it
 explicitly:
 
 ```bash
-camera-timelapse --mode manual --config /main/capturesettings/exposurecompensation
+camera-timelapse . --mode manual --config /main/capturesettings/exposurecompensation
 ```
 
 You can inspect supported camera config paths with:
@@ -149,8 +151,8 @@ Use `--interval 0` to disable delay between rounds.
 
 ## Output Files
 
-Files are written to `./capture` in the current working directory by default and
-named as a numbered sequence:
+Files are written to the directory you pass in, or the directory you enter at
+the prompt, and named as a numbered sequence:
 
 ```text
 0001_01.jpg
@@ -164,11 +166,15 @@ named as a numbered sequence:
 If the output directory already contains numbered files, the next group number
 continues from the highest existing group.
 
+The temporary download scratch directory is created inside the chosen output
+directory and removed after the session.
+
 ## Command Reference
 
 ```text
 --mode {aeb,manual}       Capture mode. Defaults to aeb.
---output-dir PATH         Download directory. Defaults to ./capture in the current directory.
+output_dir PATH           Download directory. Example: .
+--output-dir PATH         Optional alias for the same directory.
 --config PATH             Exposure compensation config path for manual mode.
 --gphoto PATH             Path to the gphoto2 executable.
 --dry-run                 Print commands without controlling a camera.
