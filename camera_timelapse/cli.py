@@ -5,31 +5,21 @@ import shutil
 import sys
 from pathlib import Path
 
-from camera_timelapse.camera.config import (
-    find_exposure_config,
-    read_aeb_current_index,
-    shots_needed_to_finish_aeb_round,
-)
-from camera_timelapse.capture.aeb import (
-    capture_aeb_round,
-    download_aeb_rounds,
-)
 from camera_timelapse.capture.common import next_group_number
-from camera_timelapse.capture.manual import (
-    capture_manual_round,
-    download_manual_rounds,
+from camera_timelapse.core.schedule import (
+    has_reached_scheduled_time,
+    parse_end_time,
+    parse_start_time,
+    wait_until_start_time,
 )
-from camera_timelapse.capture.timing import (
-    current_interval_timestamp,
-    wait_for_next_round,
-)
-from camera_timelapse.core.constants import AEB_SHOT_COUNT
 from camera_timelapse.core.log import log
-from camera_timelapse.core.schedule import parse_start_time, wait_until_start_time
-from camera_timelapse.capture.session import run_capture_and_download_session
-from camera_timelapse.gphoto import GPhotoError, run_gphoto
-from camera_timelapse.parsing import parse_choices
-from camera_timelapse.system.ptpcamera_guard import suppress_ptpcamerad
+from camera_timelapse.cli_flow import (
+    maybe_prompt_round_count,
+    run_dry_run_session,
+    run_standard_session,
+    validate_args,
+)
+from camera_timelapse.gphoto import GPhotoError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,6 +70,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--end-at",
+        type=parse_end_time,
+        metavar="HH:MM",
+        help=(
+            "Stop after the current group once today's 24-hour HH:MM time is reached. "
+            "Omit to run until other limits stop the session."
+        ),
+    )
+    parser.add_argument(
         "--round",
         dest="round_count",
         type=int,
@@ -88,90 +87,34 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
-    if args.interval is not None and args.interval < 0:
-        parser.error("--interval must be 0 or a positive number of seconds.")
-    if args.round_count is not None and args.round_count <= 0:
-        parser.error("--round must be a positive integer.")
-
-
-def maybe_prompt_round_count(round_count: int | None) -> int | None:
-    if round_count is not None:
-        return round_count
-
-    log("未提供 --round，程序将持续循环拍摄。", level="warn", file=sys.stderr)
-    if not sys.stdin.isatty():
-        log("当前输入不是交互式终端，无法补充参数，继续循环拍摄。", level="warn", file=sys.stderr)
-        return None
-
-    answer = input("是否要现在补充 --round 参数？[y/N] ").strip().lower()
-    if answer not in {"y", "yes"}:
-        return None
-
-    while True:
-        raw_round_count = input("请输入总拍摄轮数: ").strip()
-        try:
-            value = int(raw_round_count)
-        except ValueError:
-            print("请输入正整数。")
-            continue
-        if value <= 0:
-            print("请输入正整数。")
-            continue
-        return value
-
-
-def prepare_manual_context(args: argparse.Namespace) -> tuple[str, list[str]]:
-    exposure_config = find_exposure_config(args.gphoto, args.config, dry_run=args.dry_run)
-    log(f"Using exposure compensation config: {exposure_config}")
-    config_output = run_gphoto(args.gphoto, ["--get-config", exposure_config], dry_run=args.dry_run)
-    choices = parse_choices(config_output)
-    return exposure_config, choices
-
-
-def capture_single_round(
-    args: argparse.Namespace,
-    exposure_config: str | None,
-    choices: list[str] | None,
-) -> list[tuple[str, str]] | list[tuple[int, str, str]]:
-    if args.mode == "aeb":
-        current_index = read_aeb_current_index(args.gphoto, dry_run=args.dry_run)
-        shots_to_take = shots_needed_to_finish_aeb_round(current_index)
-        if current_index > 1:
-            log(
-                f"Continuing partial AEB round from shot {current_index}/{AEB_SHOT_COUNT}; "
-                f"{shots_to_take} shot(s) needed to finish"
-            )
-        else:
-            log("Starting a fresh AEB round")
-        return capture_aeb_round(
-            args.gphoto,
-            shots_to_take,
-            dry_run=args.dry_run,
-        )
-
-    if exposure_config is None or choices is None:
-        raise GPhotoError("Manual mode exposure configuration was not prepared.")
-
-    return capture_manual_round(
-        args.gphoto,
-        exposure_config,
-        choices,
-        dry_run=args.dry_run,
-    )
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     validate_args(parser, args)
     args.round_count = maybe_prompt_round_count(args.round_count)
 
+    effective_end_at = None if args.round_count is not None else args.end_at
+    if effective_end_at is not None and has_reached_scheduled_time(effective_end_at):
+        log(
+            f"Scheduled end time {effective_end_at:%H:%M} has already passed; stopping without capture",
+            level="warn",
+            file=sys.stderr,
+        )
+        return 0
+
     try:
         wait_until_start_time(args.start_at)
     except KeyboardInterrupt:
         log("Interrupted by user", level="warn", file=sys.stderr)
         return 130
+
+    if effective_end_at is not None and has_reached_scheduled_time(effective_end_at):
+        log(
+            f"Scheduled end time {effective_end_at:%H:%M} has already passed; stopping without capture",
+            level="warn",
+            file=sys.stderr,
+        )
+        return 0
 
     if not args.dry_run and shutil.which(args.gphoto) is None and not Path(args.gphoto).exists():
         log(
@@ -186,70 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     start_group = next_group_number(output_dir)
 
-    if args.dry_run:
-        try:
-            with suppress_ptpcamerad():
-                exposure_config: str | None = None
-                choices: list[str] | None = None
-                if args.mode == "manual":
-                    exposure_config, choices = prepare_manual_context(args)
-
-                completed_rounds = 0
-                while args.round_count is None or completed_rounds < args.round_count:
-                    round_started_at = current_interval_timestamp()
-                    round_number = start_group + completed_rounds
-                    log(f"Starting capture round {round_number:04d}")
-                    captured_rounds = [
-                        capture_single_round(args, exposure_config, choices)
-                    ]
-                    if args.mode == "aeb":
-                        download_aeb_rounds(
-                            args.gphoto,
-                            output_dir,
-                            round_number,
-                            captured_rounds,  # type: ignore[arg-type]
-                            dry_run=True,
-                        )
-                    else:
-                        download_manual_rounds(
-                            args.gphoto,
-                            output_dir,
-                            round_number,
-                            captured_rounds,  # type: ignore[arg-type]
-                            dry_run=True,
-                        )
-                    completed_rounds += 1
-
-                    if args.round_count is not None and completed_rounds >= args.round_count:
-                        break
-
-                    wait_for_next_round(round_started_at, args.interval)
-        except KeyboardInterrupt:
-            log("Interrupted by user", level="warn", file=sys.stderr)
-            return 130
-        except GPhotoError as exc:
-            log(str(exc), level="error", file=sys.stderr)
-            return 1
-
-        log(f"Done. Files downloaded to: {args.output_dir.resolve()}")
-        return 0
-
     try:
-        with suppress_ptpcamerad():
-            exposure_config: str | None = None
-            choices: list[str] | None = None
-            if args.mode == "manual":
-                exposure_config, choices = prepare_manual_context(args)
-            run_capture_and_download_session(
-                gphoto=args.gphoto,
-                output_dir=output_dir,
-                start_group=start_group,
-                total_rounds=args.round_count,
-                interval=args.interval,
-                mode=args.mode,
-                exposure_config=exposure_config,
-                choices=choices,
-            )
+        if args.dry_run:
+            run_dry_run_session(args, output_dir, start_group, effective_end_at)
+        else:
+            run_standard_session(args, output_dir, start_group, effective_end_at)
     except KeyboardInterrupt:
         log("Interrupted by user", level="warn", file=sys.stderr)
         return 130

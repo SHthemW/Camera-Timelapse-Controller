@@ -74,6 +74,14 @@ camera-timelapse --start-at 21:30 --interval 5 --round 100
 If the time has already passed for today, the program logs a warning and starts
 immediately.
 
+Stop after the current group once today's 22:00 is reached:
+
+```bash
+camera-timelapse --end-at 22:00 --interval 5
+```
+
+If `--round` is also set, `--round` wins and `--end-at` is ignored with a warning.
+
 Write files to a custom directory:
 
 ```bash
@@ -166,6 +174,7 @@ continues from the highest existing group.
 --dry-run                 Print commands without controlling a camera.
 --interval SECONDS        Seconds between capture round starts.
 --start-at HH:MM          Wait until today's 24-hour start time.
+--end-at HH:MM            Stop after the current group once today's time is reached.
 --round COUNT             Total capture rounds. Omit to capture forever.
 ```
 

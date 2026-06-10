@@ -66,6 +66,14 @@ camera-timelapse --start-at 21:30 --interval 5 --round 100
 
 如果当天该时间已经过去，程序会打印 warning 并立即开始。
 
+在今天 22:00 到达后，拍完当前组就停止：
+
+```bash
+camera-timelapse --end-at 22:00 --interval 5
+```
+
+如果同时提供 `--round`，则以 `--round` 为准，`--end-at` 会被忽略并打印 warning。
+
 指定输出目录：
 
 ```bash
@@ -151,6 +159,7 @@ gphoto2 --list-config
 --dry-run                 只打印命令，不控制相机。
 --interval SECONDS        每组开始时间之间的秒数。
 --start-at HH:MM          等待到今天的 24 小时时间后再开始。
+--end-at HH:MM            到达今天的这个时间后，拍完当前组就停止。
 --round COUNT             总拍摄组数，省略时会持续拍摄。
 ```
 

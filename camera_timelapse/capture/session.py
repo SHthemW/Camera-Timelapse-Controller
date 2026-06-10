@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import shutil
 import tempfile
 from pathlib import Path
@@ -18,6 +19,7 @@ from camera_timelapse.capture.timing import (
     wait_for_next_round,
 )
 from camera_timelapse.core.log import log
+from camera_timelapse.core.schedule import has_reached_scheduled_time
 from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession
 
 
@@ -34,6 +36,7 @@ def run_capture_and_download_session(
     mode: str,
     exposure_config: str | None,
     choices: list[str] | None,
+    end_at: dt.time | None,
 ) -> list[CapturedRound]:
     download_temp_dir = Path(tempfile.mkdtemp(prefix="camera_timelapse_download_"))
 
@@ -49,6 +52,7 @@ def run_capture_and_download_session(
                 mode,
                 exposure_config,
                 choices,
+                end_at,
             )
             if captured_rounds:
                 log("Capture phase finished; starting download phase")
@@ -68,6 +72,7 @@ def capture_all_rounds_in_shell(
     mode: str,
     exposure_config: str | None,
     choices: list[str] | None,
+    end_at: dt.time | None,
 ) -> list[CapturedRound]:
     captured_rounds: list[CapturedRound] = []
     completed_rounds = 0
@@ -82,6 +87,10 @@ def capture_all_rounds_in_shell(
         completed_rounds += 1
 
         if total_rounds is not None and completed_rounds >= total_rounds:
+            break
+
+        if end_at is not None and has_reached_scheduled_time(end_at):
+            log(f"Scheduled end time {end_at:%H:%M} reached; stopping after this round")
             break
 
         wait_for_next_round(round_started_at, interval)
