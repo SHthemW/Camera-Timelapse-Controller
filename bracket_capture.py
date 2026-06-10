@@ -2,8 +2,9 @@
 """
 Capture a three-shot exposure bracket with gPhoto2.
 
-The script sets exposure compensation to +1 EV, 0 EV, and -1 EV, captures one
-image at each setting, and downloads the files into ./capture next to this file.
+By default the script uses the camera's AEB settings to capture a three-shot
+bracket quickly, then downloads the files into ./capture next to this file.
+Manual per-shot exposure compensation is still available with --mode manual.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ DEFAULT_CONFIG_CANDIDATES = (
 )
 
 BRACKET_STOPS = (1.0, 0.0, -1.0)
+AEB_SHOT_COUNT = 3
 DRY_RUN_CAPTURE_FOLDER = "/dry-run"
 SHELL_PROMPT_PATTERN = re.compile(r"(?:^|\n)gphoto2: .*?> $", re.DOTALL)
 
@@ -245,26 +247,140 @@ def next_group_number(output_dir: Path) -> int:
 
 
 def parse_camera_file(capture_output: str) -> tuple[str, str]:
+    camera_files = parse_camera_files(capture_output)
+    if not camera_files:
+        raise GPhotoError(f"Could not find captured camera file in gPhoto2 output:\n{capture_output}")
+    return camera_files[0]
+
+
+def parse_camera_files(capture_output: str) -> list[tuple[str, str]]:
     patterns = (
         r"New file is in location\s+(.+?)\s+on the camera",
         r"新文件在相机中\s+(.+?)\s+处",
     )
-    camera_path = None
+    camera_files: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
 
     for pattern in patterns:
-        match = re.search(pattern, capture_output)
-        if match:
-            camera_path = match.group(1).strip()
-            break
+        for match in re.finditer(pattern, capture_output):
+            camera_file = split_camera_path(match.group(1).strip())
+            if camera_file not in seen:
+                camera_files.append(camera_file)
+                seen.add(camera_file)
 
-    if not camera_path:
-        raise GPhotoError(f"Could not find captured camera file in gPhoto2 output:\n{capture_output}")
+    return camera_files
 
+
+def split_camera_path(camera_path: str) -> tuple[str, str]:
     if "/" not in camera_path:
         return "/", camera_path
 
     folder, filename = camera_path.rsplit("/", 1)
     return folder or "/", filename
+
+
+def read_aeb_current_index(gphoto: str, *, dry_run: bool) -> int:
+    if dry_run:
+        return 1
+
+    output = run_gphoto(gphoto, ["--get-config", "/main/other/d0c3"], dry_run=dry_run)
+    match = re.search(r"Current:\s+(\d+)", output)
+    if not match:
+        raise GPhotoError(f"Could not read AEB current shot index from gPhoto2 output:\n{output}")
+
+    return int(match.group(1))
+
+
+def shots_needed_to_finish_aeb_round(current_index: int) -> int:
+    if current_index < 1 or current_index > AEB_SHOT_COUNT:
+        raise GPhotoError(
+            f"Camera reports AEB current shot index {current_index}, "
+            f"expected 1-{AEB_SHOT_COUNT}."
+        )
+
+    return AEB_SHOT_COUNT - current_index + 1
+
+
+def parse_list_files(output: str) -> tuple[str, list[str]]:
+    folder_header = re.compile(r"^There (?:is|are) \d+ file[s]? in folder '(.+)'\.")
+    file_entry = re.compile(r"^#\d+\s+(\S+)\s+")
+
+    current_folder = ""
+    current_files: list[str] = []
+    last_folder = ""
+    last_files: list[str] = []
+
+    for line in output.splitlines():
+        header_match = folder_header.match(line.strip())
+        if header_match:
+            if current_folder and current_files:
+                last_folder = current_folder
+                last_files = current_files
+            current_folder = header_match.group(1)
+            current_files = []
+            continue
+
+        file_match = file_entry.match(line.strip())
+        if file_match and current_folder:
+            current_files.append(file_match.group(1))
+
+    if current_folder and current_files:
+        last_folder = current_folder
+        last_files = current_files
+
+    if not last_folder or not last_files:
+        raise GPhotoError(f"Could not determine latest camera folder from gPhoto2 output:\n{output}")
+
+    return last_folder, last_files
+
+
+def download_camera_file(
+    gphoto: str,
+    folder: str,
+    camera_file: str,
+    destination: Path,
+    *,
+    dry_run: bool,
+) -> None:
+    log(f"Downloading {folder}/{camera_file} to {destination}")
+    run_gphoto(
+        gphoto,
+        [
+            "--folder",
+            folder,
+            "--filename",
+            str(destination),
+            "--get-file",
+            camera_file,
+            "--force-overwrite",
+        ],
+        dry_run=dry_run,
+    )
+
+
+def read_storage_basedir(gphoto: str, *, dry_run: bool) -> str:
+    if dry_run:
+        return "/store_00010001"
+
+    output = run_gphoto(gphoto, ["--storage-info"], dry_run=dry_run)
+    match = re.search(r"basedir=(\S+)", output)
+    if not match:
+        raise GPhotoError(f"Could not read storage base directory from gPhoto2 output:\n{output}")
+
+    return match.group(1)
+
+
+def latest_dcim_folder(gphoto: str, *, dry_run: bool) -> str:
+    if dry_run:
+        return "/store_00010001/DCIM/172NZ_30"
+
+    basedir = read_storage_basedir(gphoto, dry_run=dry_run)
+    output = run_gphoto(gphoto, ["--folder", f"{basedir}/DCIM", "--list-folders"], dry_run=dry_run)
+    folders = re.findall(r"^\s*-\s+(\S+)\s*$", output, flags=re.MULTILINE)
+    if not folders:
+        raise GPhotoError(f"Could not determine latest DCIM folder from gPhoto2 output:\n{output}")
+
+    return f"{basedir}/DCIM/{folders[-1]}"
 
 
 def capture_to_camera(
@@ -301,56 +417,100 @@ def capture_to_camera_in_shell(
     return parse_camera_file(output)
 
 
-def download_camera_file(
+def destination_for_capture(output_dir: Path, group: int, index: int, camera_file: str) -> Path:
+    suffix = Path(camera_file).suffix or ".jpg"
+    return output_dir / f"{group:04d}_{index:02d}{suffix}"
+
+
+def capture_aeb_bracket(
     gphoto: str,
-    folder: str,
-    camera_file: str,
-    destination: Path,
+    output_dir: Path,
     *,
     dry_run: bool,
 ) -> None:
-    log(f"Downloading {folder}/{camera_file} to {destination}")
-    run_gphoto(
-        gphoto,
-        [
-            "--folder",
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    group = next_group_number(output_dir)
+    group_started_at = current_timestamp()
+    group_started = time.monotonic()
+
+    log(f"Starting AEB group {group:04d}")
+
+    current_index = read_aeb_current_index(gphoto, dry_run=dry_run)
+    shots_to_take = shots_needed_to_finish_aeb_round(current_index)
+
+    if current_index > 1:
+        log(
+            f"Continuing partial AEB round from shot {current_index}/{AEB_SHOT_COUNT}; "
+            f"{shots_to_take} shot(s) needed to finish"
+        )
+    else:
+        log("Starting a fresh AEB round")
+
+    if dry_run:
+        for shot_index in range(1, shots_to_take + 1):
+            log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
+    else:
+        download_temp_dir = output_dir / ".download_tmp"
+        download_temp_dir.mkdir(parents=True, exist_ok=True)
+
+        with GPhotoShellSession(gphoto, download_temp_dir) as shell:
+            for shot_index in range(1, shots_to_take + 1):
+                log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
+                shell.run("capture-image")
+
+        try:
+            download_temp_dir.rmdir()
+        except OSError:
+            pass
+
+    if dry_run:
+        folder, camera_files = "/store_00010001/DCIM/172NZ_30", [
+            "dry-run-aeb-1.jpg",
+            "dry-run-aeb-2.jpg",
+            "dry-run-aeb-3.jpg",
+        ]
+    else:
+        folder = latest_dcim_folder(gphoto, dry_run=dry_run)
+        log(f"Inspecting camera folder: {folder}")
+        output = run_gphoto(
+            gphoto,
+            ["--folder", folder, "--list-files"],
+            dry_run=dry_run,
+        )
+        folder, camera_files = parse_list_files(output)
+
+    if len(camera_files) < 3:
+        raise GPhotoError(
+            f"AEB capture produced {len(camera_files)} visible file(s), expected at least 3."
+        )
+
+    selected_files = camera_files[-3:]
+    log(f"Selected latest AEB files from {folder}: {', '.join(selected_files)}")
+
+    for index, camera_file in enumerate(selected_files, start=1):
+        destination = destination_for_capture(output_dir, group, index, camera_file)
+        download_camera_file(
+            gphoto,
             folder,
-            "--filename",
-            str(destination),
-            "--get-file",
             camera_file,
-            "--force-overwrite",
-        ],
-        dry_run=dry_run,
+            destination,
+            dry_run=dry_run,
+        )
+
+    if not dry_run:
+        post_current_index = read_aeb_current_index(gphoto, dry_run=False)
+        if post_current_index != 1:
+            raise GPhotoError(
+                "AEB round finished but camera reports current shot index "
+                f"{post_current_index}, expected 1."
+            )
+
+    elapsed = time.monotonic() - group_started
+    log(
+        f"Finished AEB group {group:04d}; capture time: {elapsed:.1f} seconds; "
+        f"started at {group_started_at}; finished at {current_timestamp()}"
     )
-
-
-def camera_path(folder: str, camera_file: str) -> str:
-    if folder == "/":
-        return f"/{camera_file}"
-    return f"{folder.rstrip('/')}/{camera_file}"
-
-
-def download_camera_file_in_shell(
-    shell: GPhotoShellSession,
-    folder: str,
-    camera_file: str,
-    destination: Path,
-) -> None:
-    source = camera_path(folder, camera_file)
-    temporary_file = shell.working_dir / Path(camera_file).name
-
-    if temporary_file.exists():
-        temporary_file.unlink()
-
-    log(f"Downloading {source} to {destination}")
-    shell.run(f"get {source}")
-
-    if not temporary_file.exists():
-        raise GPhotoError(f"Downloaded file was not found locally: {temporary_file}")
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_file.replace(destination)
 
 
 def capture_bracket(
@@ -404,10 +564,8 @@ def capture_bracket(
                 captured_files.append((index, folder, camera_file))
 
             for index, folder, camera_file in captured_files:
-                stem = f"{group:04d}_{index:02d}"
-                suffix = Path(camera_file).suffix or ".jpg"
-                destination = output_dir / f"{stem}{suffix}"
-                download_camera_file_in_shell(shell, folder, camera_file, destination)
+                destination = destination_for_capture(output_dir, group, index, camera_file)
+                download_camera_file(gphoto, folder, camera_file, destination, dry_run=dry_run)
 
         try:
             download_temp_dir.rmdir()
@@ -427,6 +585,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Capture +1 EV, 0 EV, and -1 EV photos through gPhoto2."
     )
     parser.add_argument(
+        "--mode",
+        choices=("aeb", "manual"),
+        default="aeb",
+        help="Capture mode. Defaults to camera AEB; use manual for per-shot EV changes.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=script_dir / "capture",
@@ -434,7 +598,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--config",
-        help="gPhoto2 exposure compensation config path, if auto-detection fails.",
+        help="Manual mode exposure compensation config path, if auto-detection fails.",
     )
     parser.add_argument(
         "--gphoto",
@@ -462,14 +626,22 @@ def main(argv: list[str] | None = None) -> int:
         return 127
 
     try:
-        exposure_config = find_exposure_config(args.gphoto, args.config, dry_run=args.dry_run)
-        log(f"Using exposure compensation config: {exposure_config}")
-        capture_bracket(
-            args.gphoto,
-            args.output_dir.resolve(),
-            exposure_config,
-            dry_run=args.dry_run,
-        )
+        if args.mode == "aeb":
+            log("Using camera AEB mode")
+            capture_aeb_bracket(
+                args.gphoto,
+                args.output_dir.resolve(),
+                dry_run=args.dry_run,
+            )
+        else:
+            exposure_config = find_exposure_config(args.gphoto, args.config, dry_run=args.dry_run)
+            log(f"Using exposure compensation config: {exposure_config}")
+            capture_bracket(
+                args.gphoto,
+                args.output_dir.resolve(),
+                exposure_config,
+                dry_run=args.dry_run,
+            )
     except GPhotoError as exc:
         log(str(exc), file=sys.stderr)
         return 1
