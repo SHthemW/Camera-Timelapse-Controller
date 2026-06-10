@@ -79,7 +79,7 @@ def capture_manual_round(
         )
         return captured_files
 
-    with GPhotoShellSession(gphoto, Path.cwd(), extra_args=["--keep"]) as shell:
+    with GPhotoShellSession(gphoto, Path.cwd()) as shell:
         return capture_manual_round_in_shell(shell, exposure_config, choices)
 
 

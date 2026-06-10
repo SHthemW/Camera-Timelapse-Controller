@@ -43,7 +43,7 @@ def run_capture_and_download_session(
     captured_rounds: list[CapturedRound] = []
 
     try:
-        with GPhotoShellSession(gphoto, download_temp_dir, extra_args=["--keep"]) as shell:
+        with GPhotoShellSession(gphoto, download_temp_dir) as shell:
             captured_rounds = capture_all_rounds_in_shell(
                 shell,
                 total_rounds,

@@ -85,7 +85,7 @@ def capture_aeb_round(
         captured_files = capture_aeb_dry_run(shots_to_take)
         return captured_files[-shots_to_take:]
 
-    with GPhotoShellSession(gphoto, Path.cwd(), extra_args=["--keep"]) as shell:
+    with GPhotoShellSession(gphoto, Path.cwd()) as shell:
         return capture_aeb_round_in_shell(shell, shots_to_take)
 
 

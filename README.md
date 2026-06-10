@@ -16,6 +16,7 @@ compensation for each shot.
 - Use camera AEB mode by default.
 - Use manual exposure compensation when AEB is not suitable.
 - Download files into a numbered output sequence.
+- Remove captured files from camera storage after download.
 - Continue numbering from existing files in the output directory.
 - Keep round intervals based on timestamps, so capture and download time counts
   toward `--interval`.
@@ -189,4 +190,5 @@ output_dir PATH           Download directory. Example: .
 - Configure camera AEB settings on the camera before using AEB mode.
 - Make sure the camera storage has enough space for the session.
 - Make sure the computer has enough free disk space for downloaded files.
+- Captured files are removed from camera storage after they are downloaded.
 - Press `Ctrl-C` to stop a running session.
