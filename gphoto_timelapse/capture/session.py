@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import shutil
-import time
 from pathlib import Path
 from typing import Union
 
@@ -13,6 +12,10 @@ from gphoto_timelapse.capture.aeb import capture_aeb_round_in_shell
 from gphoto_timelapse.capture.common import destination_for_capture
 from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
 from gphoto_timelapse.capture.manual import capture_manual_round_in_shell
+from gphoto_timelapse.capture.timing import (
+    current_interval_timestamp,
+    wait_for_next_round,
+)
 from gphoto_timelapse.core.log import log
 from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession
 
@@ -72,6 +75,7 @@ def capture_all_rounds_in_shell(
     completed_rounds = 0
 
     while total_rounds is None or completed_rounds < total_rounds:
+        round_started_at = current_interval_timestamp()
         round_number = start_group + completed_rounds
         log(f"Starting capture round {round_number:04d}")
         captured_rounds.append(
@@ -82,9 +86,7 @@ def capture_all_rounds_in_shell(
         if total_rounds is not None and completed_rounds >= total_rounds:
             break
 
-        if interval is not None and interval > 0:
-            log(f"Waiting {interval:g} second(s) before next round")
-            time.sleep(interval)
+        wait_for_next_round(round_started_at, interval)
 
     return captured_rounds
 

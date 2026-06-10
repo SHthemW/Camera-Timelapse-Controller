@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
-import time
 from pathlib import Path
 
 from gphoto_timelapse.camera.config import (
@@ -19,6 +18,10 @@ from gphoto_timelapse.capture.common import next_group_number
 from gphoto_timelapse.capture.manual import (
     capture_manual_round,
     download_manual_rounds,
+)
+from gphoto_timelapse.capture.timing import (
+    current_interval_timestamp,
+    wait_for_next_round,
 )
 from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
 from gphoto_timelapse.core.log import log
@@ -63,8 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--interval",
         type=float,
         help=(
-            "Seconds to wait after each capture round before starting the next round. "
-            "Use 0 for no delay."
+            "Seconds between capture round starts. Time spent capturing and downloading "
+            "counts toward the interval. Use 0 for no delay."
         ),
     )
     parser.add_argument(
@@ -178,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 completed_rounds = 0
                 while args.round_count is None or completed_rounds < args.round_count:
+                    round_started_at = current_interval_timestamp()
                     round_number = start_group + completed_rounds
                     log(f"Starting capture round {round_number:04d}")
                     captured_rounds = [
@@ -204,9 +208,7 @@ def main(argv: list[str] | None = None) -> int:
                     if args.round_count is not None and completed_rounds >= args.round_count:
                         break
 
-                    if args.interval is not None and args.interval > 0:
-                        log(f"Waiting {args.interval:g} second(s) before next round")
-                        time.sleep(args.interval)
+                    wait_for_next_round(round_started_at, args.interval)
         except KeyboardInterrupt:
             log("Interrupted by user", level="warn", file=sys.stderr)
             return 130
