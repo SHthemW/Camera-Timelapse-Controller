@@ -6,11 +6,11 @@ import sys
 import time
 from pathlib import Path
 
-from .camera.config import find_exposure_config
-from .capture import capture_aeb_bracket, capture_bracket
-from .gphoto import GPhotoError
-from .core.log import log
-from .system.ptpcamera_guard import suppress_ptpcamerad
+from gphoto_timelapse.camera.config import find_exposure_config
+from gphoto_timelapse.capture import capture_aeb_bracket, capture_bracket
+from gphoto_timelapse.core.log import log
+from gphoto_timelapse.gphoto import GPhotoError
+from gphoto_timelapse.system.ptpcamera_guard import suppress_ptpcamerad
 
 
 def build_parser() -> argparse.ArgumentParser:

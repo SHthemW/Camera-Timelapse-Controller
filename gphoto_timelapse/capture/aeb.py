@@ -3,22 +3,22 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from ..camera.config import (
+from gphoto_timelapse.camera.config import (
     latest_dcim_folder,
     read_aeb_current_index,
     shots_needed_to_finish_aeb_round,
 )
-from .common import (
+from gphoto_timelapse.capture.common import (
     destination_for_capture,
     download_camera_file,
     download_camera_file_in_shell,
     next_group_number,
     remove_empty_temp_dir,
 )
-from ..core.constants import AEB_SHOT_COUNT
-from ..core.log import current_timestamp, log
-from ..gphoto import GPhotoError, GPhotoShellSession, run_gphoto
-from ..parsing import format_camera_files, parse_camera_files, parse_list_files
+from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
+from gphoto_timelapse.core.log import current_timestamp, log
+from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from gphoto_timelapse.parsing import format_camera_files, parse_camera_files, parse_list_files
 
 
 def capture_aeb_bracket(

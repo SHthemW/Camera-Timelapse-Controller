@@ -3,16 +3,16 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .common import (
+from gphoto_timelapse.capture.common import (
     destination_for_capture,
     download_camera_file,
     next_group_number,
     remove_empty_temp_dir,
 )
-from ..core.constants import BRACKET_STOPS, DRY_RUN_CAPTURE_FOLDER
-from ..core.log import current_timestamp, log
-from ..gphoto import GPhotoShellSession, run_gphoto
-from ..parsing import choice_for_ev, format_ev, parse_camera_file, parse_choices
+from gphoto_timelapse.core.constants import BRACKET_STOPS, DRY_RUN_CAPTURE_FOLDER
+from gphoto_timelapse.core.log import current_timestamp, log
+from gphoto_timelapse.gphoto import GPhotoShellSession, run_gphoto
+from gphoto_timelapse.parsing import choice_for_ev, format_ev, parse_camera_file, parse_choices
 
 
 def capture_bracket(

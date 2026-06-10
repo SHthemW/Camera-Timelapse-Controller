@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import threading
 
-from ..core.log import log
+from gphoto_timelapse.core.log import log
 
 
 PTPCAMERAD_PROCESS = "ptpcamerad"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from ..gphoto import GPhotoError
+from gphoto_timelapse.gphoto import GPhotoError
 
 
 def parse_choices(config_output: str) -> list[str]:
