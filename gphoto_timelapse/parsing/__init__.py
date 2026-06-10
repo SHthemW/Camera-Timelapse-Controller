@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .gphoto import GPhotoError
+from ..gphoto import GPhotoError
 
 
 def parse_choices(config_output: str) -> list[str]:
@@ -137,4 +137,3 @@ def camera_path(folder: str, camera_file: str) -> str:
 
 def format_camera_files(camera_files: list[tuple[str, str]]) -> str:
     return ", ".join(camera_path(folder, camera_file) for folder, camera_file in camera_files)
-

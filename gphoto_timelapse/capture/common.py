@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .gphoto import GPhotoError, GPhotoShellSession, run_gphoto
-from .log import log
-from .parsing import camera_path
+from ..core.log import log
+from ..gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from ..parsing import camera_path
 
 
 def next_group_number(output_dir: Path) -> int:
@@ -79,4 +79,3 @@ def remove_empty_temp_dir(download_temp_dir: Path) -> None:
         download_temp_dir.rmdir()
     except OSError:
         pass
-

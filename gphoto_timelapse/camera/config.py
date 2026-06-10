@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 
-from .constants import AEB_SHOT_COUNT, DEFAULT_CONFIG_CANDIDATES
-from .gphoto import GPhotoError, run_gphoto
+from ..core.constants import AEB_SHOT_COUNT, DEFAULT_CONFIG_CANDIDATES
+from ..gphoto import GPhotoError, run_gphoto
 
 
 def find_exposure_config(gphoto: str, override: str | None, *, dry_run: bool) -> str:
@@ -81,4 +81,3 @@ def latest_dcim_folder(gphoto: str, *, dry_run: bool) -> str:
         raise GPhotoError(f"Could not determine latest DCIM folder from gPhoto2 output:\n{output}")
 
     return f"{basedir}/DCIM/{folders[-1]}"
-

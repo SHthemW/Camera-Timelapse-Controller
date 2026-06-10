@@ -3,16 +3,16 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .capture_common import (
+from .common import (
     destination_for_capture,
     download_camera_file,
     next_group_number,
     remove_empty_temp_dir,
 )
-from .constants import BRACKET_STOPS, DRY_RUN_CAPTURE_FOLDER
-from .gphoto import GPhotoShellSession, run_gphoto
-from .log import current_timestamp, log
-from .parsing import choice_for_ev, format_ev, parse_camera_file, parse_choices
+from ..core.constants import BRACKET_STOPS, DRY_RUN_CAPTURE_FOLDER
+from ..core.log import current_timestamp, log
+from ..gphoto import GPhotoShellSession, run_gphoto
+from ..parsing import choice_for_ev, format_ev, parse_camera_file, parse_choices
 
 
 def capture_bracket(
@@ -132,4 +132,3 @@ def capture_manual_files(
             download_camera_file(gphoto, folder, camera_file, destination, dry_run=False)
 
     remove_empty_temp_dir(download_temp_dir)
-

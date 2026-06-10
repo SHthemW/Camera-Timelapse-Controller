@@ -6,10 +6,11 @@ import sys
 import time
 from pathlib import Path
 
-from .camera_config import find_exposure_config
+from .camera.config import find_exposure_config
 from .capture import capture_aeb_bracket, capture_bracket
 from .gphoto import GPhotoError
-from .log import log
+from .core.log import log
+from .system.ptpcamera_guard import suppress_ptpcamerad
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -110,7 +111,8 @@ def main(argv: list[str] | None = None) -> int:
         return 127
 
     try:
-        capture_with_optional_interval(args)
+        with suppress_ptpcamerad():
+            capture_with_optional_interval(args)
     except KeyboardInterrupt:
         log("Interrupted by user", file=sys.stderr)
         return 130
@@ -120,4 +122,3 @@ def main(argv: list[str] | None = None) -> int:
 
     log(f"Done. Files downloaded to: {args.output_dir.resolve()}")
     return 0
-

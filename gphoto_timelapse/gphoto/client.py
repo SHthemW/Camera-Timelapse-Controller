@@ -5,7 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from .log import log
+from ..core.log import log
 
 
 SHELL_PROMPT_PATTERN = re.compile(r"(?:^|\n)gphoto2: .*?> $", re.DOTALL)
@@ -109,4 +109,3 @@ def run_gphoto(gphoto: str, args: list[str], *, dry_run: bool = False) -> str:
         raise GPhotoError(f"Command failed: {printable}\n{detail}")
 
     return completed.stdout
-
