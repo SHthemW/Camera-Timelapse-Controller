@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import re
 import shutil
 import subprocess
@@ -26,10 +27,77 @@ DEFAULT_CONFIG_CANDIDATES = (
 )
 
 BRACKET_STOPS = (1.0, 0.0, -1.0)
+DRY_RUN_CAPTURE_FOLDER = "/dry-run"
+SHELL_PROMPT_PATTERN = re.compile(r"(?:^|\n)gphoto2: .*?> $", re.DOTALL)
 
 
 class GPhotoError(RuntimeError):
     """Raised when a gPhoto2 command fails or camera settings are unsupported."""
+
+
+class GPhotoShellSession:
+    def __init__(self, gphoto: str, working_dir: Path) -> None:
+        self.working_dir = working_dir
+        self.process = subprocess.Popen(
+            [gphoto, "--shell"],
+            cwd=str(working_dir),
+            env=gphoto_environment(),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=0,
+        )
+        self._read_until_prompt()
+
+    def __enter__(self) -> "GPhotoShellSession":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self.process.poll() is not None:
+            return
+
+        try:
+            if self.process.stdin is not None:
+                self.process.stdin.write("quit\n")
+                self.process.stdin.flush()
+        finally:
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+
+    def run(self, command: str, *, check: bool = True) -> str:
+        if self.process.stdin is None:
+            raise GPhotoError("gPhoto2 shell stdin is unavailable.")
+
+        self.process.stdin.write(f"{command}\n")
+        self.process.stdin.flush()
+        output = self._read_until_prompt()
+
+        if check and "*** Error" in output:
+            raise GPhotoError(f"Command failed in gPhoto2 shell: {command}\n{output.strip()}")
+
+        return output
+
+    def _read_until_prompt(self) -> str:
+        if self.process.stdout is None:
+            raise GPhotoError("gPhoto2 shell stdout is unavailable.")
+
+        output = []
+        while True:
+            character = self.process.stdout.read(1)
+            if character == "":
+                detail = "".join(output).strip()
+                raise GPhotoError(f"gPhoto2 shell exited unexpectedly.\n{detail}")
+
+            output.append(character)
+            text = "".join(output)
+            if SHELL_PROMPT_PATTERN.search(text):
+                return text
 
 
 def current_timestamp() -> str:
@@ -40,6 +108,13 @@ def log(message: str, *, file=None) -> None:
     if file is None:
         file = sys.stdout
     print(f"[{current_timestamp()}] {message}", file=file)
+
+
+def gphoto_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["LC_ALL"] = "C"
+    environment["LANGUAGE"] = "C"
+    return environment
 
 
 def run_gphoto(gphoto: str, args: list[str], *, dry_run: bool = False) -> str:
@@ -56,6 +131,7 @@ def run_gphoto(gphoto: str, args: list[str], *, dry_run: bool = False) -> str:
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=gphoto_environment(),
     )
 
     if completed.returncode != 0:
@@ -168,6 +244,115 @@ def next_group_number(output_dir: Path) -> int:
     return highest + 1
 
 
+def parse_camera_file(capture_output: str) -> tuple[str, str]:
+    patterns = (
+        r"New file is in location\s+(.+?)\s+on the camera",
+        r"新文件在相机中\s+(.+?)\s+处",
+    )
+    camera_path = None
+
+    for pattern in patterns:
+        match = re.search(pattern, capture_output)
+        if match:
+            camera_path = match.group(1).strip()
+            break
+
+    if not camera_path:
+        raise GPhotoError(f"Could not find captured camera file in gPhoto2 output:\n{capture_output}")
+
+    if "/" not in camera_path:
+        return "/", camera_path
+
+    folder, filename = camera_path.rsplit("/", 1)
+    return folder or "/", filename
+
+
+def capture_to_camera(
+    gphoto: str,
+    exposure_config: str,
+    config_value: str,
+    ev: float,
+    *,
+    dry_run: bool,
+) -> tuple[str, str]:
+    log(f"Setting exposure compensation to {format_ev(ev)} EV")
+    run_gphoto(gphoto, ["--set-config", f"{exposure_config}={config_value}"], dry_run=dry_run)
+
+    log("Capturing to camera storage")
+    output = run_gphoto(gphoto, ["--capture-image"], dry_run=dry_run)
+    if dry_run:
+        filename = f"dry-run-{format_ev(ev).replace('+', 'plus').replace('-', 'minus')}.jpg"
+        return DRY_RUN_CAPTURE_FOLDER, filename
+
+    return parse_camera_file(output)
+
+
+def capture_to_camera_in_shell(
+    shell: GPhotoShellSession,
+    exposure_config: str,
+    config_value: str,
+    ev: float,
+) -> tuple[str, str]:
+    log(f"Setting exposure compensation to {format_ev(ev)} EV")
+    shell.run(f"set-config {exposure_config}={config_value}")
+
+    log("Capturing to camera storage")
+    output = shell.run("capture-image")
+    return parse_camera_file(output)
+
+
+def download_camera_file(
+    gphoto: str,
+    folder: str,
+    camera_file: str,
+    destination: Path,
+    *,
+    dry_run: bool,
+) -> None:
+    log(f"Downloading {folder}/{camera_file} to {destination}")
+    run_gphoto(
+        gphoto,
+        [
+            "--folder",
+            folder,
+            "--filename",
+            str(destination),
+            "--get-file",
+            camera_file,
+            "--force-overwrite",
+        ],
+        dry_run=dry_run,
+    )
+
+
+def camera_path(folder: str, camera_file: str) -> str:
+    if folder == "/":
+        return f"/{camera_file}"
+    return f"{folder.rstrip('/')}/{camera_file}"
+
+
+def download_camera_file_in_shell(
+    shell: GPhotoShellSession,
+    folder: str,
+    camera_file: str,
+    destination: Path,
+) -> None:
+    source = camera_path(folder, camera_file)
+    temporary_file = shell.working_dir / Path(camera_file).name
+
+    if temporary_file.exists():
+        temporary_file.unlink()
+
+    log(f"Downloading {source} to {destination}")
+    shell.run(f"get {source}")
+
+    if not temporary_file.exists():
+        raise GPhotoError(f"Downloaded file was not found locally: {temporary_file}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_file.replace(destination)
+
+
 def capture_bracket(
     gphoto: str,
     output_dir: Path,
@@ -185,25 +370,49 @@ def capture_bracket(
 
     log(f"Starting group {group:04d}")
 
-    for index, ev in enumerate(BRACKET_STOPS, start=1):
-        value = choice_for_ev(choices, ev)
-        stem = f"{group:04d}_{index:02d}"
-        filename = str(output_dir / f"{stem}.%C")
+    captured_files: list[tuple[int, str, str]] = []
 
-        log(f"Setting exposure compensation to {format_ev(ev)} EV")
-        run_gphoto(gphoto, ["--set-config", f"{exposure_config}={value}"], dry_run=dry_run)
+    if dry_run:
+        for index, ev in enumerate(BRACKET_STOPS, start=1):
+            value = choice_for_ev(choices, ev)
+            folder, camera_file = capture_to_camera(
+                gphoto,
+                exposure_config,
+                value,
+                ev,
+                dry_run=dry_run,
+            )
+            captured_files.append((index, folder, camera_file))
 
-        log(f"Capturing {filename}")
-        run_gphoto(
-            gphoto,
-            [
-                "--capture-image-and-download",
-                "--filename",
-                filename,
-                "--force-overwrite",
-            ],
-            dry_run=dry_run,
-        )
+        for index, folder, camera_file in captured_files:
+            stem = f"{group:04d}_{index:02d}"
+            destination = output_dir / f"{stem}.%C"
+            download_camera_file(gphoto, folder, camera_file, destination, dry_run=dry_run)
+    else:
+        download_temp_dir = output_dir / ".download_tmp"
+        download_temp_dir.mkdir(parents=True, exist_ok=True)
+
+        with GPhotoShellSession(gphoto, download_temp_dir) as shell:
+            for index, ev in enumerate(BRACKET_STOPS, start=1):
+                value = choice_for_ev(choices, ev)
+                folder, camera_file = capture_to_camera_in_shell(
+                    shell,
+                    exposure_config,
+                    value,
+                    ev,
+                )
+                captured_files.append((index, folder, camera_file))
+
+            for index, folder, camera_file in captured_files:
+                stem = f"{group:04d}_{index:02d}"
+                suffix = Path(camera_file).suffix or ".jpg"
+                destination = output_dir / f"{stem}{suffix}"
+                download_camera_file_in_shell(shell, folder, camera_file, destination)
+
+        try:
+            download_temp_dir.rmdir()
+        except OSError:
+            pass
 
     elapsed = time.monotonic() - group_started
     log(
