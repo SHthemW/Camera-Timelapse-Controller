@@ -66,9 +66,11 @@ def resolve_output_dir(parser: argparse.ArgumentParser, args: argparse.Namespace
         return Path(answer).expanduser().resolve()
 
 
-def maybe_prompt_round_count(round_count: int | None) -> int | None:
+def maybe_prompt_round_count(round_count: int | None, end_at: dt.time | None) -> int | None:
     if round_count is not None:
         return round_count
+    if end_at is not None:
+        return None
 
     log("未提供 --round，程序将持续循环拍摄。", level="warn", file=sys.stderr)
     if not sys.stdin.isatty():

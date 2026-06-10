@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     validate_args(parser, args)
-    args.round_count = maybe_prompt_round_count(args.round_count)
+    args.round_count = maybe_prompt_round_count(args.round_count, args.end_at)
 
     effective_end_at = None if args.round_count is not None else args.end_at
     if effective_end_at is not None and has_reached_scheduled_time(effective_end_at):
