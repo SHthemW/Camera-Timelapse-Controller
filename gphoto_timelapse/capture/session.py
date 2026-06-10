@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Union
 
@@ -34,10 +35,7 @@ def run_capture_and_download_session(
     exposure_config: str | None,
     choices: list[str] | None,
 ) -> list[CapturedRound]:
-    download_temp_dir = Path.cwd() / ".download_tmp"
-    if download_temp_dir.exists():
-        shutil.rmtree(download_temp_dir)
-    download_temp_dir.mkdir(parents=True, exist_ok=True)
+    download_temp_dir = Path(tempfile.mkdtemp(prefix="camera_timelapse_download_"))
 
     captured_rounds: list[CapturedRound] = []
 

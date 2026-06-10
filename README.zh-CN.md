@@ -20,7 +20,7 @@ Camera Timelapse Controller 是一个基于 `gphoto2` 的 Python 命令行工具
 
 ## 环境要求
 
-- 推荐使用 Python 3.10 或更新版本。
+- 推荐使用 Python 3.9 或更新版本。
 - 需要安装 `gphoto2`，并确保它可以访问相机。
 - 需要一台 `gphoto2` 支持的相机。
 
@@ -38,28 +38,42 @@ gphoto2 --auto-detect
 
 ## 快速开始
 
+在项目目录中以 editable 模式安装命令：
+
+```bash
+python3 -m pip install -e .
+```
+
+如果系统 pip 较旧，建议在虚拟环境中先升级 `pip`、`setuptools` 和 `wheel` 后再安装。
+
 拍摄两组包围曝光，并让每组开始时间之间间隔 5 秒：
 
 ```bash
-python3 bracket_capture.py --interval 5 --round 2
+camera-timelapse --interval 5 --round 2
 ```
 
 持续拍摄，直到手动中断：
 
 ```bash
-python3 bracket_capture.py --interval 10
+camera-timelapse --interval 10
 ```
 
 指定输出目录：
 
 ```bash
-python3 bracket_capture.py --output-dir ./capture --interval 6 --round 100
+camera-timelapse --output-dir ./capture --interval 6 --round 100
 ```
 
 不连接相机，只预览执行流程：
 
 ```bash
-python3 bracket_capture.py --dry-run --interval 5 --round 2
+camera-timelapse --dry-run --interval 5 --round 2
+```
+
+旧的脚本入口仍然可用：
+
+```bash
+python3 /path/to/Camera-Timelapse-Controller/bracket_capture.py --interval 5 --round 2
 ```
 
 ## 拍摄模式
@@ -69,7 +83,7 @@ python3 bracket_capture.py --dry-run --interval 5 --round 2
 AEB 是默认模式：
 
 ```bash
-python3 bracket_capture.py --mode aeb --interval 5 --round 10
+camera-timelapse --mode aeb --interval 5 --round 10
 ```
 
 程序会读取相机当前 AEB 拍摄序号，并完成当前三张一组的包围曝光。如果相机已经处于 AEB 组中间，程序只会拍摄完成这一组所需的剩余张数。
@@ -79,13 +93,13 @@ python3 bracket_capture.py --mode aeb --interval 5 --round 10
 手动模式会在每次拍摄前切换曝光补偿：
 
 ```bash
-python3 bracket_capture.py --mode manual --interval 5 --round 10
+camera-timelapse --mode manual --interval 5 --round 10
 ```
 
 如果程序无法自动识别曝光补偿配置路径，可以手动传入：
 
 ```bash
-python3 bracket_capture.py --mode manual --config /main/capturesettings/exposurecompensation
+camera-timelapse --mode manual --config /main/capturesettings/exposurecompensation
 ```
 
 可以用下面的命令查看相机支持的配置路径：
@@ -106,7 +120,7 @@ gphoto2 --list-config
 
 ## 输出文件
 
-默认输出目录是 `./capture`，文件会按组编号和组内序号命名：
+默认输出目录是当前启动目录下的 `./capture`，文件会按组编号和组内序号命名：
 
 ```text
 0001_01.jpg
@@ -123,7 +137,7 @@ gphoto2 --list-config
 
 ```text
 --mode {aeb,manual}       拍摄模式，默认为 aeb。
---output-dir PATH         下载目录，默认为 ./capture。
+--output-dir PATH         下载目录，默认为当前目录下的 ./capture。
 --config PATH             手动模式下的曝光补偿配置路径。
 --gphoto PATH             gphoto2 可执行文件路径。
 --dry-run                 只打印命令，不控制相机。

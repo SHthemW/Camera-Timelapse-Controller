@@ -26,7 +26,7 @@ compensation for each shot.
 
 ## Requirements
 
-- Python 3.10 or newer is recommended.
+- Python 3.9 or newer is recommended.
 - `gphoto2` must be installed and able to access your camera.
 - A camera supported by `gphoto2`.
 
@@ -44,28 +44,43 @@ gphoto2 --auto-detect
 
 ## Quick Start
 
+Install the command in editable mode from the project directory:
+
+```bash
+python3 -m pip install -e .
+```
+
+If your system pip is old, run this inside a virtual environment after upgrading
+`pip`, `setuptools`, and `wheel`.
+
 Capture two bracket rounds with a 5-second interval between round starts:
 
 ```bash
-python3 bracket_capture.py --interval 5 --round 2
+camera-timelapse --interval 5 --round 2
 ```
 
 Capture forever until interrupted:
 
 ```bash
-python3 bracket_capture.py --interval 10
+camera-timelapse --interval 10
 ```
 
 Write files to a custom directory:
 
 ```bash
-python3 bracket_capture.py --output-dir ./capture --interval 6 --round 100
+camera-timelapse --output-dir ./capture --interval 6 --round 100
 ```
 
 Preview the flow without talking to a camera:
 
 ```bash
-python3 bracket_capture.py --dry-run --interval 5 --round 2
+camera-timelapse --dry-run --interval 5 --round 2
+```
+
+The legacy script entry point still works:
+
+```bash
+python3 /path/to/Camera-Timelapse-Controller/bracket_capture.py --interval 5 --round 2
 ```
 
 ## Capture Modes
@@ -75,7 +90,7 @@ python3 bracket_capture.py --dry-run --interval 5 --round 2
 AEB mode is the default:
 
 ```bash
-python3 bracket_capture.py --mode aeb --interval 5 --round 10
+camera-timelapse --mode aeb --interval 5 --round 10
 ```
 
 The tool reads the camera's current AEB shot index and finishes the current
@@ -87,14 +102,14 @@ the tool captures only the shots needed to complete that group.
 Manual mode changes exposure compensation before each shot:
 
 ```bash
-python3 bracket_capture.py --mode manual --interval 5 --round 10
+camera-timelapse --mode manual --interval 5 --round 10
 ```
 
 If the exposure compensation setting cannot be detected automatically, pass it
 explicitly:
 
 ```bash
-python3 bracket_capture.py --mode manual --config /main/capturesettings/exposurecompensation
+camera-timelapse --mode manual --config /main/capturesettings/exposurecompensation
 ```
 
 You can inspect supported camera config paths with:
@@ -117,7 +132,8 @@ Use `--interval 0` to disable delay between rounds.
 
 ## Output Files
 
-Files are written to `./capture` by default and named as a numbered sequence:
+Files are written to `./capture` in the current working directory by default and
+named as a numbered sequence:
 
 ```text
 0001_01.jpg
@@ -135,7 +151,7 @@ continues from the highest existing group.
 
 ```text
 --mode {aeb,manual}       Capture mode. Defaults to aeb.
---output-dir PATH         Download directory. Defaults to ./capture.
+--output-dir PATH         Download directory. Defaults to ./capture in the current directory.
 --config PATH             Exposure compensation config path for manual mode.
 --gphoto PATH             Path to the gphoto2 executable.
 --dry-run                 Print commands without controlling a camera.

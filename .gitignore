@@ -2,3 +2,7 @@
 __pycache__/
 *.py[cod]
 /capture/
+/.venv/
+/*.egg-info/
+/build/
+/dist/

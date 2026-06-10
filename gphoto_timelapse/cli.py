@@ -32,7 +32,6 @@ from gphoto_timelapse.system.ptpcamera_guard import suppress_ptpcamerad
 
 
 def build_parser() -> argparse.ArgumentParser:
-    script_dir = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
         description="Capture +1 EV, 0 EV, and -1 EV photos through gPhoto2."
     )
@@ -45,8 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=script_dir / "capture",
-        help="Download directory. Defaults to ./capture next to this script.",
+        default=Path("capture"),
+        help="Download directory. Defaults to ./capture in the current working directory.",
     )
     parser.add_argument(
         "--config",
