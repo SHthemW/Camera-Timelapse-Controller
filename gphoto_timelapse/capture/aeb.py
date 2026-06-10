@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 from gphoto_timelapse.camera.config import (
-    latest_dcim_folder,
     read_aeb_current_index,
     shots_needed_to_finish_aeb_round,
 )
@@ -12,7 +11,6 @@ from gphoto_timelapse.capture.common import (
     destination_for_capture,
     download_camera_file,
     next_group_number,
-    remove_empty_temp_dir,
 )
 from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
 from gphoto_timelapse.core.log import current_timestamp, log
@@ -82,30 +80,21 @@ def capture_aeb_round(
     shots_to_take: int,
     *,
     dry_run: bool,
-    camera_folder: str | None = None,
 ) -> CapturedFiles:
     if dry_run:
         captured_files = capture_aeb_dry_run(shots_to_take)
         return captured_files[-shots_to_take:]
 
-    if camera_folder is None:
-        camera_folder = latest_dcim_folder(gphoto, dry_run=False)
-
-    download_temp_dir = Path.cwd() / ".download_tmp"
-    download_temp_dir.mkdir(parents=True, exist_ok=True)
-
-    with GPhotoShellSession(gphoto, download_temp_dir) as shell:
-        return capture_aeb_round_in_shell(shell, shots_to_take, camera_folder)
+    with GPhotoShellSession(gphoto, Path.cwd(), extra_args=["--keep"]) as shell:
+        return capture_aeb_round_in_shell(shell, shots_to_take)
 
 
 def capture_aeb_round_in_shell(
     shell: GPhotoShellSession,
     shots_to_take: int,
-    camera_folder: str,
 ) -> CapturedFiles:
-    shell.run(f"cd {camera_folder}")
-    local_dir = shell.working_dir
     captured_files: CapturedFiles = []
+    local_dir = shell.working_dir
 
     for shot_index in range(1, shots_to_take + 1):
         log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
@@ -128,7 +117,6 @@ def capture_aeb_round_in_shell(
                 "expected exactly 1."
             )
         captured_files.append((str(local_dir), after[0].name))
-
     return captured_files
 
 
@@ -148,16 +136,15 @@ def download_aeb_rounds(
                 download_camera_file(gphoto, folder, camera_file, destination, dry_run=True)
         return
 
-    local_dirs: set[Path] = set()
     for group_offset, selected_files in enumerate(captured_rounds):
         group = start_group + group_offset
         for index, (folder, camera_file) in enumerate(selected_files, start=1):
             destination = destination_for_capture(output_dir, group, index, camera_file)
-            download_camera_file(gphoto, folder, camera_file, destination, dry_run=False)
-            local_dirs.add(Path(folder))
-
-    for local_dir in local_dirs:
-        remove_empty_temp_dir(local_dir)
+            local_source = Path(folder) / camera_file
+            if not local_source.exists():
+                raise GPhotoError(f"Downloaded file was not found locally: {local_source}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            local_source.replace(destination)
 
 
 def capture_aeb_dry_run(shots_to_take: int) -> CapturedFiles:

@@ -16,10 +16,11 @@ class GPhotoError(RuntimeError):
 
 
 class GPhotoShellSession:
-    def __init__(self, gphoto: str, working_dir: Path) -> None:
+    def __init__(self, gphoto: str, working_dir: Path, *, extra_args: list[str] | None = None) -> None:
         self.working_dir = working_dir
+        command = [gphoto, *(extra_args or []), "--shell"]
         self.process = subprocess.Popen(
-            [gphoto, "--shell"],
+            command,
             cwd=str(working_dir),
             env=gphoto_environment(),
             stdin=subprocess.PIPE,

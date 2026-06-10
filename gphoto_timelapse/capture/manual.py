@@ -7,13 +7,18 @@ from gphoto_timelapse.capture.common import (
     destination_for_capture,
     download_camera_file,
     next_group_number,
-    remove_empty_temp_dir,
 )
-from gphoto_timelapse.camera.config import latest_dcim_folder
 from gphoto_timelapse.core.constants import BRACKET_STOPS, DRY_RUN_CAPTURE_FOLDER
 from gphoto_timelapse.core.log import current_timestamp, log
-from gphoto_timelapse.gphoto import GPhotoShellSession, run_gphoto
-from gphoto_timelapse.parsing import choice_for_ev, format_ev, parse_camera_file, parse_choices
+from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from gphoto_timelapse.parsing import (
+    choice_for_ev,
+    format_ev,
+    format_camera_files,
+    parse_camera_file,
+    parse_camera_files,
+    parse_choices,
+)
 
 
 CapturedFiles = list[tuple[int, str, str]]
@@ -63,7 +68,6 @@ def capture_manual_round(
     choices: list[str],
     *,
     dry_run: bool,
-    camera_folder: str | None = None,
 ) -> CapturedFiles:
     if dry_run:
         captured_files: CapturedFiles = []
@@ -75,26 +79,18 @@ def capture_manual_round(
         )
         return captured_files
 
-    if camera_folder is None:
-        camera_folder = latest_dcim_folder(gphoto, dry_run=False)
-
-    download_temp_dir = Path.cwd() / ".download_tmp"
-    download_temp_dir.mkdir(parents=True, exist_ok=True)
-
-    with GPhotoShellSession(gphoto, download_temp_dir) as shell:
-        return capture_manual_round_in_shell(shell, exposure_config, choices, camera_folder)
+    with GPhotoShellSession(gphoto, Path.cwd(), extra_args=["--keep"]) as shell:
+        return capture_manual_round_in_shell(shell, exposure_config, choices)
 
 
 def capture_manual_round_in_shell(
     shell: GPhotoShellSession,
     exposure_config: str,
     choices: list[str],
-    camera_folder: str,
 ) -> CapturedFiles:
-    shell.run(f"cd {camera_folder}")
-    local_dir = shell.working_dir
     captured_files: CapturedFiles = []
-    for index, ev in enumerate(BRACKET_STOPS, start=1):
+    local_dir = shell.working_dir
+    for ev in BRACKET_STOPS:
         value = choice_for_ev(choices, ev)
         before = {path.name for path in local_dir.iterdir() if path.is_file()}
         output = capture_to_camera_in_shell(
@@ -103,16 +99,23 @@ def capture_manual_round_in_shell(
             value,
             ev,
         )
-        shot_files = parse_camera_file(output)
+        shot_files = parse_camera_files(output)
+        if shot_files:
+            log(f"Captured manual file path(s): {format_camera_files(shot_files)}")
+        else:
+            log(
+                f"Manual shot {format_ev(ev)} completed without a file path in output",
+                level="warn",
+            )
         after = sorted(
             path for path in local_dir.iterdir() if path.is_file() and path.name not in before
         )
         if len(after) != 1:
             raise GPhotoError(
-                f"Manual shot {index}/{len(BRACKET_STOPS)} downloaded {len(after)} local file(s), "
+                f"Manual shot {format_ev(ev)} downloaded {len(after)} local file(s), "
                 "expected exactly 1."
             )
-        captured_files.append((str(local_dir), after[0].name))
+        captured_files.append((len(captured_files) + 1, str(local_dir), after[0].name))
 
     return captured_files
 
@@ -133,16 +136,15 @@ def download_manual_rounds(
                 download_camera_file(gphoto, folder, camera_file, destination, dry_run=True)
         return
 
-    local_dirs: set[Path] = set()
     for group_offset, captured_files in enumerate(captured_rounds):
         group = start_group + group_offset
         for index, folder, camera_file in captured_files:
             destination = destination_for_capture(output_dir, group, index, camera_file)
-            download_camera_file(gphoto, folder, camera_file, destination, dry_run=False)
-            local_dirs.add(Path(folder))
-
-    for local_dir in local_dirs:
-        remove_empty_temp_dir(local_dir)
+            local_source = Path(folder) / camera_file
+            if not local_source.exists():
+                raise GPhotoError(f"Downloaded file was not found locally: {local_source}")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            local_source.replace(destination)
 
 
 def capture_to_camera(
@@ -170,13 +172,12 @@ def capture_to_camera_in_shell(
     exposure_config: str,
     config_value: str,
     ev: float,
-) -> tuple[str, str]:
+) -> str:
     log(f"Setting exposure compensation to {format_ev(ev)} EV")
     shell.run(f"set-config {exposure_config}={config_value}")
 
     log("Capturing to camera storage")
-    output = shell.run("capture-image-and-download")
-    return parse_camera_file(output)
+    return shell.run("capture-image-and-download")
 
 
 def capture_manual_dry_run(

@@ -8,25 +8,22 @@ from pathlib import Path
 
 from gphoto_timelapse.camera.config import (
     find_exposure_config,
-    latest_dcim_folder,
     read_aeb_current_index,
-    read_aeb_current_index_in_shell,
     shots_needed_to_finish_aeb_round,
 )
 from gphoto_timelapse.capture.aeb import (
     capture_aeb_round,
-    capture_aeb_round_in_shell,
     download_aeb_rounds,
 )
 from gphoto_timelapse.capture.common import next_group_number
 from gphoto_timelapse.capture.manual import (
     capture_manual_round,
-    capture_manual_round_in_shell,
     download_manual_rounds,
 )
 from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
 from gphoto_timelapse.core.log import log
-from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from gphoto_timelapse.capture.session import run_capture_and_download_session
+from gphoto_timelapse.gphoto import GPhotoError, run_gphoto
 from gphoto_timelapse.parsing import parse_choices
 from gphoto_timelapse.system.ptpcamera_guard import suppress_ptpcamerad
 
@@ -120,66 +117,10 @@ def prepare_manual_context(args: argparse.Namespace) -> tuple[str, list[str]]:
     return exposure_config, choices
 
 
-def capture_single_round_in_shell(
-    args: argparse.Namespace,
-    shell: GPhotoShellSession,
-    exposure_config: str | None,
-    choices: list[str] | None,
-    camera_folder: str,
-) -> list[tuple[str, str]] | list[tuple[int, str, str]]:
-    if args.mode == "aeb":
-        current_index = read_aeb_current_index_in_shell(shell)
-        shots_to_take = shots_needed_to_finish_aeb_round(current_index)
-        if current_index > 1:
-            log(
-                f"Continuing partial AEB round from shot {current_index}/{AEB_SHOT_COUNT}; "
-                f"{shots_to_take} shot(s) needed to finish"
-            )
-        else:
-            log("Starting a fresh AEB round")
-        return capture_aeb_round_in_shell(shell, shots_to_take, camera_folder)
-
-    if exposure_config is None or choices is None:
-        raise GPhotoError("Manual mode exposure configuration was not prepared.")
-
-    return capture_manual_round_in_shell(shell, exposure_config, choices, camera_folder)
-
-
-def capture_all_rounds_in_shell(
-    args: argparse.Namespace,
-    shell: GPhotoShellSession,
-    total_rounds: int | None,
-    start_group: int,
-    exposure_config: str | None,
-    choices: list[str] | None,
-    camera_folder: str,
-) -> list[list[tuple[str, str]] | list[tuple[int, str, str]]]:
-    captured_rounds: list[list[tuple[str, str]] | list[tuple[int, str, str]]] = []
-    completed_rounds = 0
-
-    while total_rounds is None or completed_rounds < total_rounds:
-        round_number = start_group + completed_rounds
-        log(f"Starting capture round {round_number:04d}")
-        captured_rounds.append(
-            capture_single_round_in_shell(args, shell, exposure_config, choices, camera_folder)
-        )
-        completed_rounds += 1
-
-        if total_rounds is not None and completed_rounds >= total_rounds:
-            break
-
-        if args.interval is not None and args.interval > 0:
-            log(f"Waiting {args.interval:g} second(s) before next round")
-            time.sleep(args.interval)
-
-    return captured_rounds
-
-
 def capture_single_round(
     args: argparse.Namespace,
     exposure_config: str | None,
     choices: list[str] | None,
-    camera_folder: str | None = None,
 ) -> list[tuple[str, str]] | list[tuple[int, str, str]]:
     if args.mode == "aeb":
         current_index = read_aeb_current_index(args.gphoto, dry_run=args.dry_run)
@@ -195,7 +136,6 @@ def capture_single_round(
             args.gphoto,
             shots_to_take,
             dry_run=args.dry_run,
-            camera_folder=camera_folder,
         )
 
     if exposure_config is None or choices is None:
@@ -205,63 +145,6 @@ def capture_single_round(
         args.gphoto,
         exposure_config,
         choices,
-        dry_run=args.dry_run,
-        camera_folder=camera_folder,
-    )
-
-
-def capture_all_rounds(
-    args: argparse.Namespace,
-    total_rounds: int | None,
-    start_group: int,
-    exposure_config: str | None,
-    choices: list[str] | None,
-    camera_folder: str | None = None,
-) -> list[list[tuple[str, str]] | list[tuple[int, str, str]]]:
-    captured_rounds: list[list[tuple[str, str]] | list[tuple[int, str, str]]] = []
-    completed_rounds = 0
-
-    while total_rounds is None or completed_rounds < total_rounds:
-        round_number = start_group + completed_rounds
-        log(f"Starting capture round {round_number:04d}")
-        captured_rounds.append(capture_single_round(args, exposure_config, choices, camera_folder))
-        completed_rounds += 1
-
-        if total_rounds is not None and completed_rounds >= total_rounds:
-            break
-
-        if args.interval is not None and args.interval > 0:
-            log(f"Waiting {args.interval:g} second(s) before next round")
-            time.sleep(args.interval)
-
-    return captured_rounds
-
-
-def download_all_rounds(
-    args: argparse.Namespace,
-    output_dir: Path,
-    start_group: int,
-    captured_rounds: list[list[tuple[str, str]] | list[tuple[int, str, str]]],
-) -> None:
-    if not captured_rounds:
-        return
-
-    log("Capture phase finished; starting download phase")
-    if args.mode == "aeb":
-        download_aeb_rounds(
-            args.gphoto,
-            output_dir,
-            start_group,
-            captured_rounds,  # type: ignore[arg-type]
-            dry_run=args.dry_run,
-        )
-        return
-
-    download_manual_rounds(
-        args.gphoto,
-        output_dir,
-        start_group,
-        captured_rounds,  # type: ignore[arg-type]
         dry_run=args.dry_run,
     )
 
@@ -290,7 +173,6 @@ def main(argv: list[str] | None = None) -> int:
             with suppress_ptpcamerad():
                 exposure_config: str | None = None
                 choices: list[str] | None = None
-                camera_folder: str | None = None
                 if args.mode == "manual":
                     exposure_config, choices = prepare_manual_context(args)
 
@@ -299,9 +181,24 @@ def main(argv: list[str] | None = None) -> int:
                     round_number = start_group + completed_rounds
                     log(f"Starting capture round {round_number:04d}")
                     captured_rounds = [
-                        capture_single_round(args, exposure_config, choices, camera_folder)
+                        capture_single_round(args, exposure_config, choices)
                     ]
-                    download_all_rounds(args, output_dir, round_number, captured_rounds)
+                    if args.mode == "aeb":
+                        download_aeb_rounds(
+                            args.gphoto,
+                            output_dir,
+                            round_number,
+                            captured_rounds,  # type: ignore[arg-type]
+                            dry_run=True,
+                        )
+                    else:
+                        download_manual_rounds(
+                            args.gphoto,
+                            output_dir,
+                            round_number,
+                            captured_rounds,  # type: ignore[arg-type]
+                            dry_run=True,
+                        )
                     completed_rounds += 1
 
                     if args.round_count is not None and completed_rounds >= args.round_count:
@@ -324,27 +221,18 @@ def main(argv: list[str] | None = None) -> int:
         with suppress_ptpcamerad():
             exposure_config: str | None = None
             choices: list[str] | None = None
-            camera_folder: str | None = None
             if args.mode == "manual":
                 exposure_config, choices = prepare_manual_context(args)
-            if not args.dry_run:
-                camera_folder = latest_dcim_folder(args.gphoto, dry_run=False)
-            completed_rounds = 0
-            while args.round_count is None or completed_rounds < args.round_count:
-                round_number = start_group + completed_rounds
-                log(f"Starting capture round {round_number:04d}")
-                captured_rounds = [
-                    capture_single_round(args, exposure_config, choices, camera_folder)
-                ]
-                download_all_rounds(args, output_dir, round_number, captured_rounds)
-                completed_rounds += 1
-
-                if args.round_count is not None and completed_rounds >= args.round_count:
-                    break
-
-                if args.interval is not None and args.interval > 0:
-                    log(f"Waiting {args.interval:g} second(s) before next round")
-                    time.sleep(args.interval)
+            run_capture_and_download_session(
+                gphoto=args.gphoto,
+                output_dir=output_dir,
+                start_group=start_group,
+                total_rounds=args.round_count,
+                interval=args.interval,
+                mode=args.mode,
+                exposure_config=exposure_config,
+                choices=choices,
+            )
     except KeyboardInterrupt:
         log("Interrupted by user", level="warn", file=sys.stderr)
         return 130
