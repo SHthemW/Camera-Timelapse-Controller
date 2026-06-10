@@ -49,7 +49,7 @@ class ProcessSuppressor:
         if not process_ids:
             return
 
-        log(f"Terminating {self.process_name} process(es): {', '.join(process_ids)}")
+        log(f"Terminating {self.process_name} process(es): {', '.join(process_ids)}", level="warn")
         completed = subprocess.run(
             ["pkill", "-9", "-x", self.process_name],
             check=False,
@@ -58,12 +58,12 @@ class ProcessSuppressor:
             stderr=subprocess.PIPE,
         )
         if completed.returncode == 0:
-            log(f"{self.process_name} terminated")
+            log(f"{self.process_name} terminated", level="warn")
         elif completed.returncode == 1:
-            log(f"{self.process_name} exited before termination")
+            log(f"{self.process_name} exited before termination", level="debug")
         else:
             detail = completed.stderr.strip() or completed.stdout.strip()
-            log(f"Could not terminate {self.process_name}: {detail}")
+            log(f"Could not terminate {self.process_name}: {detail}", level="warn")
 
     def _watch(self) -> None:
         while not self._stop_event.wait(self.poll_interval):
@@ -82,7 +82,7 @@ def find_process_ids(process_name: str) -> list[str]:
         return []
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip()
-        log(f"Could not inspect {process_name}: {detail}")
+        log(f"Could not inspect {process_name}: {detail}", level="warn")
         return []
 
     return [line.strip() for line in completed.stdout.splitlines() if line.strip()]

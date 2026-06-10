@@ -117,7 +117,10 @@ def capture_aeb_files(
             if shot_files:
                 log(f"Captured AEB file path(s): {format_camera_files(shot_files)}")
             else:
-                log(f"AEB shot {shot_index}/{shots_to_take} completed without a file path in output")
+                log(
+                    f"AEB shot {shot_index}/{shots_to_take} completed without a file path in output",
+                    level="warn",
+                )
 
         if len(captured_files) >= AEB_SHOT_COUNT:
             selected_files = captured_files[-AEB_SHOT_COUNT:]
@@ -140,7 +143,7 @@ def download_latest_aeb_files(
     output_dir: Path,
     group: int,
 ) -> list[tuple[str, str]]:
-    log("Capture output did not list all AEB files; falling back to camera folder scan")
+    log("Capture output did not list all AEB files; falling back to camera folder scan", level="warn")
     folder = latest_dcim_folder(gphoto, dry_run=False)
     log(f"Inspecting camera folder: {folder}")
     output = run_gphoto(

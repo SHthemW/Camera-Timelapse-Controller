@@ -106,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         log(
             "gphoto2 was not found. Install gPhoto2 and make sure it is available in PATH, "
             "or pass --gphoto /path/to/gphoto2.",
+            level="error",
             file=sys.stderr,
         )
         return 127
@@ -114,10 +115,10 @@ def main(argv: list[str] | None = None) -> int:
         with suppress_ptpcamerad():
             capture_with_optional_interval(args)
     except KeyboardInterrupt:
-        log("Interrupted by user", file=sys.stderr)
+        log("Interrupted by user", level="warn", file=sys.stderr)
         return 130
     except GPhotoError as exc:
-        log(str(exc), file=sys.stderr)
+        log(str(exc), level="error", file=sys.stderr)
         return 1
 
     log(f"Done. Files downloaded to: {args.output_dir.resolve()}")
