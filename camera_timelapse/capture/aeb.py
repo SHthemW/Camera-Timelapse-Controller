@@ -3,19 +3,19 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from gphoto_timelapse.camera.config import (
+from camera_timelapse.camera.config import (
     read_aeb_current_index,
     shots_needed_to_finish_aeb_round,
 )
-from gphoto_timelapse.capture.common import (
+from camera_timelapse.capture.common import (
     destination_for_capture,
     download_camera_file,
     next_group_number,
 )
-from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
-from gphoto_timelapse.core.log import current_timestamp, log
-from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
-from gphoto_timelapse.parsing import format_camera_files, parse_camera_files
+from camera_timelapse.core.constants import AEB_SHOT_COUNT
+from camera_timelapse.core.log import current_timestamp, log
+from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from camera_timelapse.parsing import format_camera_files, parse_camera_files
 
 
 CapturedFiles = list[tuple[str, str]]

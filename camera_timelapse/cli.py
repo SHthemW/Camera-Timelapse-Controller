@@ -5,30 +5,30 @@ import shutil
 import sys
 from pathlib import Path
 
-from gphoto_timelapse.camera.config import (
+from camera_timelapse.camera.config import (
     find_exposure_config,
     read_aeb_current_index,
     shots_needed_to_finish_aeb_round,
 )
-from gphoto_timelapse.capture.aeb import (
+from camera_timelapse.capture.aeb import (
     capture_aeb_round,
     download_aeb_rounds,
 )
-from gphoto_timelapse.capture.common import next_group_number
-from gphoto_timelapse.capture.manual import (
+from camera_timelapse.capture.common import next_group_number
+from camera_timelapse.capture.manual import (
     capture_manual_round,
     download_manual_rounds,
 )
-from gphoto_timelapse.capture.timing import (
+from camera_timelapse.capture.timing import (
     current_interval_timestamp,
     wait_for_next_round,
 )
-from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
-from gphoto_timelapse.core.log import log
-from gphoto_timelapse.capture.session import run_capture_and_download_session
-from gphoto_timelapse.gphoto import GPhotoError, run_gphoto
-from gphoto_timelapse.parsing import parse_choices
-from gphoto_timelapse.system.ptpcamera_guard import suppress_ptpcamerad
+from camera_timelapse.core.constants import AEB_SHOT_COUNT
+from camera_timelapse.core.log import log
+from camera_timelapse.capture.session import run_capture_and_download_session
+from camera_timelapse.gphoto import GPhotoError, run_gphoto
+from camera_timelapse.parsing import parse_choices
+from camera_timelapse.system.ptpcamera_guard import suppress_ptpcamerad
 
 
 def build_parser() -> argparse.ArgumentParser:

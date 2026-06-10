@@ -3,15 +3,15 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from gphoto_timelapse.capture.common import (
+from camera_timelapse.capture.common import (
     destination_for_capture,
     download_camera_file,
     next_group_number,
 )
-from gphoto_timelapse.core.constants import BRACKET_STOPS, DRY_RUN_CAPTURE_FOLDER
-from gphoto_timelapse.core.log import current_timestamp, log
-from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
-from gphoto_timelapse.parsing import (
+from camera_timelapse.core.constants import BRACKET_STOPS, DRY_RUN_CAPTURE_FOLDER
+from camera_timelapse.core.log import current_timestamp, log
+from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from camera_timelapse.parsing import (
     choice_for_ev,
     format_ev,
     format_camera_files,

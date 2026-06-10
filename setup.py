@@ -8,10 +8,10 @@ setup(
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     python_requires=">=3.9",
-    packages=find_packages(include=["gphoto_timelapse", "gphoto_timelapse.*"]),
+    packages=find_packages(include=["camera_timelapse", "camera_timelapse.*"]),
     entry_points={
         "console_scripts": [
-            "camera-timelapse=gphoto_timelapse.cli:main",
+            "camera-timelapse=camera_timelapse.cli:main",
         ],
     },
 )

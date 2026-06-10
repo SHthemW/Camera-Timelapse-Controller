@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import time
 
-from gphoto_timelapse.core.log import log
+from camera_timelapse.core.log import log
 
 
 def current_interval_timestamp() -> float:

@@ -14,7 +14,7 @@ authors = [
 dependencies = []
 
 [project.scripts]
-camera-timelapse = "gphoto_timelapse.cli:main"
+camera-timelapse = "camera_timelapse.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["gphoto_timelapse*"]
+include = ["camera_timelapse*"]

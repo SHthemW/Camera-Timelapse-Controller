@@ -5,20 +5,20 @@ import tempfile
 from pathlib import Path
 from typing import Union
 
-from gphoto_timelapse.camera.config import (
+from camera_timelapse.camera.config import (
     read_aeb_current_index_in_shell,
     shots_needed_to_finish_aeb_round,
 )
-from gphoto_timelapse.capture.aeb import capture_aeb_round_in_shell
-from gphoto_timelapse.capture.common import destination_for_capture
-from gphoto_timelapse.core.constants import AEB_SHOT_COUNT
-from gphoto_timelapse.capture.manual import capture_manual_round_in_shell
-from gphoto_timelapse.capture.timing import (
+from camera_timelapse.capture.aeb import capture_aeb_round_in_shell
+from camera_timelapse.capture.common import destination_for_capture
+from camera_timelapse.core.constants import AEB_SHOT_COUNT
+from camera_timelapse.capture.manual import capture_manual_round_in_shell
+from camera_timelapse.capture.timing import (
     current_interval_timestamp,
     wait_for_next_round,
 )
-from gphoto_timelapse.core.log import log
-from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession
+from camera_timelapse.core.log import log
+from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession
 
 
 CapturedRound = Union[list[tuple[str, str]], list[tuple[int, str, str]]]

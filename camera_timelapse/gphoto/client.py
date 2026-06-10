@@ -5,7 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from gphoto_timelapse.core.log import log
+from camera_timelapse.core.log import log
 
 
 SHELL_PROMPT_PATTERN = re.compile(r"(?:^|\n)gphoto2: .*?> $", re.DOTALL)

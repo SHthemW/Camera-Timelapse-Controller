@@ -1,10 +1,10 @@
-from gphoto_timelapse.capture.aeb import (
+from camera_timelapse.capture.aeb import (
     capture_aeb_bracket,
     capture_aeb_round,
     capture_aeb_round_in_shell,
     download_aeb_rounds,
 )
-from gphoto_timelapse.capture.manual import (
+from camera_timelapse.capture.manual import (
     capture_bracket,
     capture_manual_round,
     capture_manual_round_in_shell,

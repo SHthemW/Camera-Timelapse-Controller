@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from gphoto_timelapse.core.log import log
-from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
-from gphoto_timelapse.parsing import camera_path
+from camera_timelapse.core.log import log
+from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from camera_timelapse.parsing import camera_path
 
 
 def next_group_number(output_dir: Path) -> int:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 
-from gphoto_timelapse.core.constants import AEB_SHOT_COUNT, DEFAULT_CONFIG_CANDIDATES
-from gphoto_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
+from camera_timelapse.core.constants import AEB_SHOT_COUNT, DEFAULT_CONFIG_CANDIDATES
+from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
 
 
 def find_exposure_config(gphoto: str, override: str | None, *, dry_run: bool) -> str:
