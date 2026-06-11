@@ -48,16 +48,25 @@ def resolve_output_dir(parser: argparse.ArgumentParser, args: argparse.Namespace
     positional_output_dir = getattr(args, "output_dir", None)
     flag_output_dir = getattr(args, "output_dir_flag", None)
 
+    def resolve_path(path: Path) -> Path:
+        try:
+            return path.expanduser().resolve()
+        except FileNotFoundError:
+            parser.error(
+                "Current working directory is missing or inaccessible. "
+                "Change to an existing directory, then run the command again."
+            )
+
     if positional_output_dir is not None and flag_output_dir is not None:
-        if positional_output_dir.resolve() != flag_output_dir.resolve():
+        if resolve_path(positional_output_dir) != resolve_path(flag_output_dir):
             parser.error("Provide output directory either positionally or with --output-dir, not both.")
-        return flag_output_dir.resolve()
+        return resolve_path(flag_output_dir)
 
     if flag_output_dir is not None:
-        return flag_output_dir.resolve()
+        return resolve_path(flag_output_dir)
 
     if positional_output_dir is not None:
-        return positional_output_dir.resolve()
+        return resolve_path(positional_output_dir)
 
     if not sys.stdin.isatty():
         parser.error("Output directory is required. Pass one positionally or run interactively to be prompted.")
@@ -67,7 +76,7 @@ def resolve_output_dir(parser: argparse.ArgumentParser, args: argparse.Namespace
         if not answer:
             print("请输入有效的输出目录。")
             continue
-        return Path(answer).expanduser().resolve()
+        return resolve_path(Path(answer))
 
 
 def maybe_prompt_round_count(round_count: int | None, end_at: dt.time | None) -> int | None:
