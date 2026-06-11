@@ -66,22 +66,22 @@ Capture forever until interrupted:
 camera-timelapse . --interval 10
 ```
 
-Wait until today's 21:30 before starting capture:
+Wait until 2026-06-12 21:30 before starting capture:
 
 ```bash
-camera-timelapse --start-at 21:30 --interval 5 --round 100
+camera-timelapse --start-at 21:30 --start-day 2026-06-12 --interval 5 --round 100
 ```
 
-If the time has already passed for today, the program logs a warning and starts
-immediately.
+If `--start-day` is omitted, the program uses today's date.
 
-Stop after the current group once today's 22:00 is reached:
+Stop after the current group once 2026-06-12 22:00 is reached:
 
 ```bash
-camera-timelapse --end-at 22:00 --interval 5
+camera-timelapse --end-at 22:00 --end-day 2026-06-12 --interval 5
 ```
 
-If `--round` is also set, `--round` wins and `--end-at` is ignored with a warning.
+If `--round` is also set, `--round` wins and `--end-at/--end-day` are ignored with a warning.
+If `--end-day` is omitted, the program uses today's date.
 
 Write files to a custom directory:
 
@@ -183,8 +183,10 @@ output_dir PATH           Download directory. Example: .
 --gphoto PATH             Path to the gphoto2 executable.
 --dry-run                 Print commands without controlling a camera.
 --interval SECONDS        Seconds between capture round starts.
---start-at HH:MM          Wait until today's 24-hour start time.
---end-at HH:MM            Stop after the current group once today's time is reached.
+--start-at HH:MM          Wait until the scheduled 24-hour start time.
+--start-day YYYY-MM-DD    Date for --start-at. Defaults to today.
+--end-at HH:MM            Stop after the current group once the scheduled time is reached.
+--end-day YYYY-MM-DD      Date for --end-at. Defaults to today.
 --round COUNT             Total capture rounds. Omit to capture forever.
 ```
 

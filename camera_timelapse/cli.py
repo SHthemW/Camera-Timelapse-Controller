@@ -9,7 +9,10 @@ from camera_timelapse.capture.common import next_group_number
 from camera_timelapse.core.schedule import (
     has_reached_scheduled_time,
     parse_end_time,
+    parse_end_day,
     parse_start_time,
+    parse_start_day,
+    scheduled_datetime,
     wait_until_start_time,
 )
 from camera_timelapse.core.log import log
@@ -72,18 +75,30 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_start_time,
         metavar="HH:MM",
         help=(
-            "Wait until today's 24-hour HH:MM time before starting capture. "
-            "Omit to start immediately."
+            "Wait until the scheduled 24-hour HH:MM time before starting capture. "
+            "Use --start-day to choose the date."
         ),
+    )
+    parser.add_argument(
+        "--start-day",
+        type=parse_start_day,
+        metavar="YYYY-MM-DD",
+        help="Date for --start-at. Defaults to today if omitted.",
     )
     parser.add_argument(
         "--end-at",
         type=parse_end_time,
         metavar="HH:MM",
         help=(
-            "Stop after the current group once today's 24-hour HH:MM time is reached. "
-            "Omit to run until other limits stop the session."
+            "Stop after the current group once the scheduled 24-hour HH:MM time is reached. "
+            "Use --end-day to choose the date."
         ),
+    )
+    parser.add_argument(
+        "--end-day",
+        type=parse_end_day,
+        metavar="YYYY-MM-DD",
+        help="Date for --end-at. Defaults to today if omitted.",
     )
     parser.add_argument(
         "--round",
@@ -101,9 +116,11 @@ def main(argv: list[str] | None = None) -> int:
     args.round_count = maybe_prompt_round_count(args.round_count, args.end_at)
 
     effective_end_at = None if args.round_count is not None else args.end_at
-    if effective_end_at is not None and has_reached_scheduled_time(effective_end_at):
+    effective_end_day = None if args.round_count is not None else args.end_day
+    if effective_end_at is not None and has_reached_scheduled_time(effective_end_at, effective_end_day):
         log(
-            f"Scheduled end time {effective_end_at:%H:%M} has already passed; stopping without capture",
+            f"Scheduled end time {scheduled_datetime(effective_end_at, effective_end_day):%Y-%m-%d %H:%M} "
+            "has already passed; stopping without capture",
             level="warn",
             file=sys.stderr,
         )
@@ -112,14 +129,15 @@ def main(argv: list[str] | None = None) -> int:
     output_dir = resolve_output_dir(parser, args)
 
     try:
-        wait_until_start_time(args.start_at)
+        wait_until_start_time(args.start_at, args.start_day)
     except KeyboardInterrupt:
         log("Interrupted by user", level="warn", file=sys.stderr)
         return 130
 
-    if effective_end_at is not None and has_reached_scheduled_time(effective_end_at):
+    if effective_end_at is not None and has_reached_scheduled_time(effective_end_at, effective_end_day):
         log(
-            f"Scheduled end time {effective_end_at:%H:%M} has already passed; stopping without capture",
+            f"Scheduled end time {scheduled_datetime(effective_end_at, effective_end_day):%Y-%m-%d %H:%M} "
+            "has already passed; stopping without capture",
             level="warn",
             file=sys.stderr,
         )
@@ -139,9 +157,21 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.dry_run:
-            run_dry_run_session(args, output_dir, start_group, effective_end_at)
+            run_dry_run_session(
+                args,
+                output_dir,
+                start_group,
+                effective_end_at,
+                effective_end_day,
+            )
         else:
-            run_standard_session(args, output_dir, start_group, effective_end_at)
+            run_standard_session(
+                args,
+                output_dir,
+                start_group,
+                effective_end_at,
+                effective_end_day,
+            )
     except KeyboardInterrupt:
         log("Interrupted by user", level="warn", file=sys.stderr)
         return 130

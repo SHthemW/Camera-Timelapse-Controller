@@ -16,7 +16,7 @@ from camera_timelapse.capture.timing import (
     wait_for_next_round,
 )
 from camera_timelapse.core.log import log
-from camera_timelapse.core.schedule import has_reached_scheduled_time
+from camera_timelapse.core.schedule import has_reached_scheduled_time, scheduled_datetime
 from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession
 
 
@@ -34,6 +34,7 @@ def run_capture_and_download_session(
     exposure_config: str | None,
     choices: list[str] | None,
     end_at: dt.time | None,
+    end_day: dt.date | None,
 ) -> list[CapturedRound]:
     captured_rounds: list[CapturedRound] = []
 
@@ -48,6 +49,7 @@ def run_capture_and_download_session(
             exposure_config,
             choices,
             end_at,
+            end_day,
         )
 
     return captured_rounds
@@ -63,6 +65,7 @@ def capture_all_rounds_in_shell(
     exposure_config: str | None,
     choices: list[str] | None,
     end_at: dt.time | None,
+    end_day: dt.date | None,
 ) -> list[CapturedRound]:
     captured_rounds: list[CapturedRound] = []
     completed_rounds = 0
@@ -85,8 +88,11 @@ def capture_all_rounds_in_shell(
         if total_rounds is not None and completed_rounds >= total_rounds:
             break
 
-        if end_at is not None and has_reached_scheduled_time(end_at):
-            log(f"Scheduled end time {end_at:%H:%M} reached; stopping after this round")
+        if end_at is not None and has_reached_scheduled_time(end_at, end_day):
+            log(
+                f"Scheduled end time {scheduled_datetime(end_at, end_day):%Y-%m-%d %H:%M} "
+                "reached; stopping after this round"
+            )
             break
 
         wait_for_next_round(round_started_at, interval)

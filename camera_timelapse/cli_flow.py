@@ -24,7 +24,7 @@ from camera_timelapse.capture.timing import (
 )
 from camera_timelapse.core.constants import AEB_SHOT_COUNT
 from camera_timelapse.core.log import log
-from camera_timelapse.core.schedule import has_reached_scheduled_time
+from camera_timelapse.core.schedule import has_reached_scheduled_time, scheduled_datetime
 from camera_timelapse.gphoto import GPhotoError, run_gphoto
 from camera_timelapse.parsing import parse_choices
 from camera_timelapse.system.ptpcamera_guard import suppress_ptpcamerad
@@ -36,8 +36,12 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
         parser.error("--interval must be 0 or a positive number of seconds.")
     if args.round_count is not None and args.round_count <= 0:
         parser.error("--round must be a positive integer.")
+    if args.start_day is not None and args.start_at is None:
+        parser.error("--start-day can only be used with --start-at.")
+    if args.end_day is not None and args.end_at is None:
+        parser.error("--end-day can only be used with --end-at.")
     if args.round_count is not None and args.end_at is not None:
-        log("--round was provided, so --end-at will be ignored.", level="warn", file=sys.stderr)
+        log("--round was provided, so --end-at/--end-day will be ignored.", level="warn", file=sys.stderr)
 
 
 def resolve_output_dir(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Path:
@@ -139,15 +143,17 @@ def run_dry_run_session(
     output_dir: Path,
     start_group: int,
     end_at: dt.time | None,
+    end_day: dt.date | None,
 ) -> None:
     with suppress_ptpcamerad():
         exposure_config: str | None = None
         choices: list[str] | None = None
         if args.mode == "manual":
             exposure_config, choices = prepare_manual_context(args)
-            if end_at is not None and has_reached_scheduled_time(end_at):
+            if end_at is not None and has_reached_scheduled_time(end_at, end_day):
                 log(
-                    f"Scheduled end time {end_at:%H:%M} has already passed; stopping without capture",
+                    f"Scheduled end time {scheduled_datetime(end_at, end_day):%Y-%m-%d %H:%M} "
+                    "has already passed; stopping without capture",
                     level="warn",
                     file=sys.stderr,
                 )
@@ -180,8 +186,11 @@ def run_dry_run_session(
             if args.round_count is not None and completed_rounds >= args.round_count:
                 break
 
-            if end_at is not None and has_reached_scheduled_time(end_at):
-                log(f"Scheduled end time {end_at:%H:%M} reached; stopping after this round")
+            if end_at is not None and has_reached_scheduled_time(end_at, end_day):
+                log(
+                    f"Scheduled end time {scheduled_datetime(end_at, end_day):%Y-%m-%d %H:%M} "
+                    "reached; stopping after this round"
+                )
                 break
 
             wait_for_next_round(round_started_at, args.interval)
@@ -192,15 +201,17 @@ def run_standard_session(
     output_dir: Path,
     start_group: int,
     end_at: dt.time | None,
+    end_day: dt.date | None,
 ) -> None:
     with suppress_ptpcamerad():
         exposure_config: str | None = None
         choices: list[str] | None = None
         if args.mode == "manual":
             exposure_config, choices = prepare_manual_context(args)
-            if end_at is not None and has_reached_scheduled_time(end_at):
+            if end_at is not None and has_reached_scheduled_time(end_at, end_day):
                 log(
-                    f"Scheduled end time {end_at:%H:%M} has already passed; stopping without capture",
+                    f"Scheduled end time {scheduled_datetime(end_at, end_day):%Y-%m-%d %H:%M} "
+                    "has already passed; stopping without capture",
                     level="warn",
                     file=sys.stderr,
                 )
@@ -215,4 +226,5 @@ def run_standard_session(
             exposure_config=exposure_config,
             choices=choices,
             end_at=end_at,
+            end_day=end_day,
         )

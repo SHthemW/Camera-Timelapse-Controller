@@ -33,26 +33,52 @@ def parse_end_time(value: str) -> dt.time:
     return parse_hhmm(value, "--end-at")
 
 
-def scheduled_datetime_today(start_time: dt.time, now: dt.datetime | None = None) -> dt.datetime:
+def parse_schedule_day(value: str, flag_name: str) -> dt.date:
+    try:
+        return dt.date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{flag_name} must use YYYY-MM-DD format.") from exc
+
+
+def parse_start_day(value: str) -> dt.date:
+    return parse_schedule_day(value, "--start-day")
+
+
+def parse_end_day(value: str) -> dt.date:
+    return parse_schedule_day(value, "--end-day")
+
+
+def scheduled_datetime(
+    scheduled_time: dt.time,
+    scheduled_day: dt.date | None = None,
+    now: dt.datetime | None = None,
+) -> dt.datetime:
     if now is None:
         now = dt.datetime.now()
 
-    return dt.datetime.combine(now.date(), start_time)
+    if scheduled_day is None:
+        scheduled_day = now.date()
+
+    return dt.datetime.combine(scheduled_day, scheduled_time)
 
 
-def has_reached_scheduled_time(scheduled_time: dt.time, now: dt.datetime | None = None) -> bool:
+def has_reached_scheduled_time(
+    scheduled_time: dt.time,
+    scheduled_day: dt.date | None = None,
+    now: dt.datetime | None = None,
+) -> bool:
     if now is None:
         now = dt.datetime.now()
 
-    return now >= scheduled_datetime_today(scheduled_time, now)
+    return now >= scheduled_datetime(scheduled_time, scheduled_day, now)
 
 
-def wait_until_start_time(start_time: dt.time | None) -> None:
+def wait_until_start_time(start_time: dt.time | None, start_day: dt.date | None = None) -> None:
     if start_time is None:
         return
 
     now = dt.datetime.now()
-    scheduled_at = scheduled_datetime_today(start_time, now)
+    scheduled_at = scheduled_datetime(start_time, start_day, now)
     delay = (scheduled_at - now).total_seconds()
     if delay <= 0:
         log(

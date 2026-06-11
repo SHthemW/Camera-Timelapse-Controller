@@ -59,21 +59,22 @@ camera-timelapse . --interval 5 --round 2
 camera-timelapse . --interval 10
 ```
 
-等待到今天 21:30 后再开始拍摄：
+等待到 2026-06-12 21:30 后再开始拍摄：
 
 ```bash
-camera-timelapse --start-at 21:30 --interval 5 --round 100
+camera-timelapse --start-at 21:30 --start-day 2026-06-12 --interval 5 --round 100
 ```
 
-如果当天该时间已经过去，程序会打印 warning 并立即开始。
+如果不提供 `--start-day`，程序会默认使用当天日期。
 
-在今天 22:00 到达后，拍完当前组就停止：
+在 2026-06-12 22:00 到达后，拍完当前组就停止：
 
 ```bash
-camera-timelapse --end-at 22:00 --interval 5
+camera-timelapse --end-at 22:00 --end-day 2026-06-12 --interval 5
 ```
 
-如果同时提供 `--round`，则以 `--round` 为准，`--end-at` 会被忽略并打印 warning。
+如果同时提供 `--round`，则以 `--round` 为准，`--end-at/--end-day` 会被忽略并打印 warning。
+如果不提供 `--end-day`，程序会默认使用当天日期。
 
 指定输出目录：
 
@@ -167,8 +168,10 @@ output_dir PATH           下载目录，例如 `.`。
 --gphoto PATH             gphoto2 可执行文件路径。
 --dry-run                 只打印命令，不控制相机。
 --interval SECONDS        每组开始时间之间的秒数。
---start-at HH:MM          等待到今天的 24 小时时间后再开始。
---end-at HH:MM            到达今天的这个时间后，拍完当前组就停止。
+--start-at HH:MM          等待到指定的 24 小时时间后再开始。
+--start-day YYYY-MM-DD    `--start-at` 的日期，默认当天。
+--end-at HH:MM            到达指定时间后，拍完当前组就停止。
+--end-day YYYY-MM-DD      `--end-at` 的日期，默认当天。
 --round COUNT             总拍摄组数，省略时会持续拍摄。
 ```
 
