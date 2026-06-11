@@ -74,7 +74,7 @@ camera-timelapse --end-at 22:00 --end-day 2026-06-12 --interval 5
 ```
 
 如果同时提供 `--round`，则以 `--round` 为准，`--end-at/--end-day` 会被忽略并打印 warning。
-如果不提供 `--end-day`，程序会默认使用当天日期。
+如果不提供 `--end-day`，程序会优先使用 `--start-day`，如果 `--start-day` 也没提供才默认当天日期。
 
 指定输出目录：
 
@@ -171,7 +171,7 @@ output_dir PATH           下载目录，例如 `.`。
 --start-at HH:MM          等待到指定的 24 小时时间后再开始。
 --start-day YYYY-MM-DD    `--start-at` 的日期，默认当天。
 --end-at HH:MM            到达指定时间后，拍完当前组就停止。
---end-day YYYY-MM-DD      `--end-at` 的日期，默认当天。
+--end-day YYYY-MM-DD      `--end-at` 的日期，默认 `--start-day`，否则当天。
 --round COUNT             总拍摄组数，省略时会持续拍摄。
 ```
 

@@ -81,7 +81,7 @@ camera-timelapse --end-at 22:00 --end-day 2026-06-12 --interval 5
 ```
 
 If `--round` is also set, `--round` wins and `--end-at/--end-day` are ignored with a warning.
-If `--end-day` is omitted, the program uses today's date.
+If `--end-day` is omitted, the program uses `--start-day`, or today's date if `--start-day` is also omitted.
 
 Write files to a custom directory:
 
@@ -186,7 +186,7 @@ output_dir PATH           Download directory. Example: .
 --start-at HH:MM          Wait until the scheduled 24-hour start time.
 --start-day YYYY-MM-DD    Date for --start-at. Defaults to today.
 --end-at HH:MM            Stop after the current group once the scheduled time is reached.
---end-day YYYY-MM-DD      Date for --end-at. Defaults to today.
+--end-day YYYY-MM-DD      Date for --end-at. Defaults to --start-day or today.
 --round COUNT             Total capture rounds. Omit to capture forever.
 ```
 

@@ -98,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--end-day",
         type=parse_end_day,
         metavar="YYYY-MM-DD",
-        help="Date for --end-at. Defaults to today if omitted.",
+        help="Date for --end-at. Defaults to --start-day, or today if --start-day is omitted.",
     )
     parser.add_argument(
         "--round",
@@ -116,7 +116,9 @@ def main(argv: list[str] | None = None) -> int:
     args.round_count = maybe_prompt_round_count(args.round_count, args.end_at)
 
     effective_end_at = None if args.round_count is not None else args.end_at
-    effective_end_day = None if args.round_count is not None else args.end_day
+    effective_end_day = None
+    if args.round_count is None:
+        effective_end_day = args.end_day if args.end_day is not None else args.start_day
     if effective_end_at is not None and has_reached_scheduled_time(effective_end_at, effective_end_day):
         log(
             f"Scheduled end time {scheduled_datetime(effective_end_at, effective_end_day):%Y-%m-%d %H:%M} "
