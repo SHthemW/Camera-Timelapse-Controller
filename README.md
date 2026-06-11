@@ -167,8 +167,11 @@ the prompt, and named as a numbered sequence:
 If the output directory already contains numbered files, the next group number
 continues from the highest existing group.
 
-The temporary download scratch directory is created inside the chosen output
-directory and removed after the session.
+Files are downloaded directly into the chosen directory.
+After each successful download, the camera copy is deleted.
+
+If the session is interrupted, already completed files stay in that directory,
+and a partially downloaded current file may remain with its camera name.
 
 ## Command Reference
 

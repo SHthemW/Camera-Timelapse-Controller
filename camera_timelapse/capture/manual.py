@@ -5,6 +5,7 @@ from pathlib import Path
 
 from camera_timelapse.capture.common import (
     destination_for_capture,
+    download_camera_file_in_shell,
     download_camera_file,
     next_group_number,
 )
@@ -85,14 +86,17 @@ def capture_manual_round(
 
 def capture_manual_round_in_shell(
     shell: GPhotoShellSession,
+    output_dir: Path | None,
+    group: int | None,
     exposure_config: str,
     choices: list[str],
 ) -> CapturedFiles:
+    if (output_dir is None) != (group is None):
+        raise GPhotoError("output_dir and group must be provided together.")
+
     captured_files: CapturedFiles = []
-    local_dir = shell.working_dir
     for ev in BRACKET_STOPS:
         value = choice_for_ev(choices, ev)
-        before = {path.name for path in local_dir.iterdir() if path.is_file()}
         output = capture_to_camera_in_shell(
             shell,
             exposure_config,
@@ -100,22 +104,28 @@ def capture_manual_round_in_shell(
             ev,
         )
         shot_files = parse_camera_files(output)
-        if shot_files:
-            log(f"Captured manual file path(s): {format_camera_files(shot_files)}")
-        else:
+        if len(shot_files) != 1:
             log(
-                f"Manual shot {format_ev(ev)} completed without a file path in output",
+                f"Manual shot {format_ev(ev)} returned {len(shot_files)} file path(s): "
+                f"{format_camera_files(shot_files)}",
                 level="warn",
             )
-        after = sorted(
-            path for path in local_dir.iterdir() if path.is_file() and path.name not in before
-        )
-        if len(after) != 1:
-            raise GPhotoError(
-                f"Manual shot {format_ev(ev)} downloaded {len(after)} local file(s), "
-                "expected exactly 1."
+            raise GPhotoError(f"Manual shot {format_ev(ev)} did not return exactly one file path.")
+
+        source_folder, source_name = shot_files[0]
+        index = len(captured_files) + 1
+        if output_dir is not None and group is not None:
+            destination = destination_for_capture(output_dir, group, index, source_name)
+            download_camera_file_in_shell(
+                shell,
+                source_folder,
+                source_name,
+                destination,
             )
-        captured_files.append((len(captured_files) + 1, str(local_dir), after[0].name))
+            captured_files.append((index, str(output_dir), destination.name))
+            continue
+
+        captured_files.append((index, source_folder, source_name))
 
     return captured_files
 
@@ -177,7 +187,7 @@ def capture_to_camera_in_shell(
     shell.run(f"set-config {exposure_config}={config_value}")
 
     log("Capturing to camera storage")
-    return shell.run("capture-image-and-download")
+    return shell.run("capture-image")
 
 
 def capture_manual_dry_run(

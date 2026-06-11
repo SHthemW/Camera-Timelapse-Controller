@@ -80,3 +80,5 @@ def download_camera_file_in_shell(
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_file.replace(destination)
+    log(f"Deleting {camera_path(folder, camera_file)} from camera")
+    shell.run(f"delete {camera_file}")

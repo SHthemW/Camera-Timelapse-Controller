@@ -9,6 +9,7 @@ from camera_timelapse.camera.config import (
 )
 from camera_timelapse.capture.common import (
     destination_for_capture,
+    download_camera_file_in_shell,
     download_camera_file,
     next_group_number,
 )
@@ -92,31 +93,42 @@ def capture_aeb_round(
 def capture_aeb_round_in_shell(
     shell: GPhotoShellSession,
     shots_to_take: int,
+    *,
+    output_dir: Path | None = None,
+    group: int | None = None,
 ) -> CapturedFiles:
+    if (output_dir is None) != (group is None):
+        raise GPhotoError("output_dir and group must be provided together.")
+
     captured_files: CapturedFiles = []
-    local_dir = shell.working_dir
 
     for shot_index in range(1, shots_to_take + 1):
         log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
-        before = {path.name for path in local_dir.iterdir() if path.is_file()}
-        output = shell.run("capture-image-and-download")
+        output = shell.run("capture-image")
         shot_files = parse_camera_files(output)
-        if shot_files:
-            log(f"Captured AEB file path(s): {format_camera_files(shot_files)}")
-        else:
+        if len(shot_files) != 1:
             log(
-                f"AEB shot {shot_index}/{shots_to_take} completed without a file path in output",
+                f"AEB shot {shot_index}/{shots_to_take} returned {len(shot_files)} file path(s): "
+                f"{format_camera_files(shot_files)}",
                 level="warn",
             )
-        after = sorted(
-            path for path in local_dir.iterdir() if path.is_file() and path.name not in before
-        )
-        if len(after) != 1:
             raise GPhotoError(
-                f"AEB shot {shot_index}/{shots_to_take} downloaded {len(after)} local file(s), "
-                "expected exactly 1."
+                f"AEB shot {shot_index}/{shots_to_take} did not return exactly one file path."
             )
-        captured_files.append((str(local_dir), after[0].name))
+
+        source_folder, source_name = shot_files[0]
+        if output_dir is not None and group is not None:
+            destination = destination_for_capture(output_dir, group, shot_index, source_name)
+            download_camera_file_in_shell(
+                shell,
+                source_folder,
+                source_name,
+                destination,
+            )
+            captured_files.append((str(output_dir), destination.name))
+            continue
+
+        captured_files.append((source_folder, source_name))
     return captured_files
 
 
