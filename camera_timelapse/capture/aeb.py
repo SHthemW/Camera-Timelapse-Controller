@@ -19,7 +19,7 @@ from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
 from camera_timelapse.parsing import format_camera_files, parse_camera_files
 
 
-CapturedFiles = list[tuple[str, str]]
+CapturedFiles = list[tuple[int, str, str]]
 CapturedRounds = list[CapturedFiles]
 
 
@@ -51,6 +51,7 @@ def capture_aeb_bracket(
     captured_files = capture_aeb_round(
         gphoto,
         shots_to_take,
+        start_capture_order=current_index,
         dry_run=dry_run,
     )
     download_aeb_rounds(
@@ -80,20 +81,25 @@ def capture_aeb_round(
     gphoto: str,
     shots_to_take: int,
     *,
+    start_capture_order: int = 1,
     dry_run: bool,
 ) -> CapturedFiles:
     if dry_run:
-        captured_files = capture_aeb_dry_run(shots_to_take)
-        return captured_files[-shots_to_take:]
+        return capture_aeb_dry_run(shots_to_take, start_capture_order)
 
     with GPhotoShellSession(gphoto, Path.cwd()) as shell:
-        return capture_aeb_round_in_shell(shell, shots_to_take)
+        return capture_aeb_round_in_shell(
+            shell,
+            shots_to_take,
+            start_capture_order=start_capture_order,
+        )
 
 
 def capture_aeb_round_in_shell(
     shell: GPhotoShellSession,
     shots_to_take: int,
     *,
+    start_capture_order: int = 1,
     output_dir: Path | None = None,
     group: int | None = None,
 ) -> CapturedFiles:
@@ -103,6 +109,7 @@ def capture_aeb_round_in_shell(
     captured_files: CapturedFiles = []
 
     for shot_index in range(1, shots_to_take + 1):
+        capture_order = start_capture_order + shot_index - 1
         log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
         output = shell.run("capture-image")
         shot_files = parse_camera_files(output)
@@ -118,17 +125,17 @@ def capture_aeb_round_in_shell(
 
         source_folder, source_name = shot_files[0]
         if output_dir is not None and group is not None:
-            destination = destination_for_capture(output_dir, group, shot_index, source_name)
+            destination = destination_for_capture(output_dir, group, capture_order, source_name)
             download_camera_file_in_shell(
                 shell,
                 source_folder,
                 source_name,
                 destination,
             )
-            captured_files.append((str(output_dir), destination.name))
+            captured_files.append((capture_order, str(output_dir), destination.name))
             continue
 
-        captured_files.append((source_folder, source_name))
+        captured_files.append((capture_order, source_folder, source_name))
     return captured_files
 
 
@@ -143,14 +150,14 @@ def download_aeb_rounds(
     if dry_run:
         for group_offset, selected_files in enumerate(captured_rounds):
             group = start_group + group_offset
-            for index, (folder, camera_file) in enumerate(selected_files, start=1):
+            for index, folder, camera_file in selected_files:
                 destination = destination_for_capture(output_dir, group, index, camera_file)
                 download_camera_file(gphoto, folder, camera_file, destination, dry_run=True)
         return
 
     for group_offset, selected_files in enumerate(captured_rounds):
         group = start_group + group_offset
-        for index, (folder, camera_file) in enumerate(selected_files, start=1):
+        for index, folder, camera_file in selected_files:
             destination = destination_for_capture(output_dir, group, index, camera_file)
             local_source = Path(folder) / camera_file
             if not local_source.exists():
@@ -159,14 +166,15 @@ def download_aeb_rounds(
             local_source.replace(destination)
 
 
-def capture_aeb_dry_run(shots_to_take: int) -> CapturedFiles:
+def capture_aeb_dry_run(shots_to_take: int, start_capture_order: int = 1) -> CapturedFiles:
     for shot_index in range(1, shots_to_take + 1):
         log(f"Capturing AEB shot {shot_index}/{shots_to_take} to camera storage")
 
-    selected_files = [
-        ("/store_00010001/DCIM/172NZ_30", "dry-run-aeb-1.jpg"),
-        ("/store_00010001/DCIM/172NZ_30", "dry-run-aeb-2.jpg"),
-        ("/store_00010001/DCIM/172NZ_30", "dry-run-aeb-3.jpg"),
+    selected_files: CapturedFiles = [
+        (1, "/store_00010001/DCIM/172NZ_30", "dry-run-aeb-1.jpg"),
+        (2, "/store_00010001/DCIM/172NZ_30", "dry-run-aeb-2.jpg"),
+        (3, "/store_00010001/DCIM/172NZ_30", "dry-run-aeb-3.jpg"),
     ]
-    log(f"Using captured AEB file paths: {format_camera_files(selected_files)}")
+    selected_files = selected_files[start_capture_order - 1 : start_capture_order - 1 + shots_to_take]
+    log(f"Using captured AEB file paths: {format_camera_files([(folder, name) for _, folder, name in selected_files])}")
     return selected_files

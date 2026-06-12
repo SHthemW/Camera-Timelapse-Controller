@@ -156,12 +156,12 @@ Files are written to the directory you pass in, or the directory you enter at
 the prompt, and named as a numbered sequence:
 
 ```text
-0001_01.jpg
 0001_02.jpg
 0001_03.jpg
-0002_01.jpg
+0001_01.jpg
 0002_02.jpg
 0002_03.jpg
+0002_01.jpg
 ```
 
 If the output directory already contains numbered files, the next group number

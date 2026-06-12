@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime as dt
 from pathlib import Path
-from typing import Union
 
 from camera_timelapse.camera.config import (
     read_aeb_current_index_in_shell,
@@ -20,7 +19,7 @@ from camera_timelapse.core.schedule import has_reached_scheduled_time, scheduled
 from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession
 
 
-CapturedRound = Union[list[tuple[str, str]], list[tuple[int, str, str]]]
+CapturedRound = list[tuple[int, str, str]]
 
 
 def run_capture_and_download_session(
@@ -121,6 +120,7 @@ def capture_single_round_in_shell(
         return capture_aeb_round_in_shell(
             shell,
             shots_to_take,
+            start_capture_order=current_index,
             output_dir=output_dir,
             group=group,
         )

@@ -119,7 +119,7 @@ def capture_single_round(
     args: argparse.Namespace,
     exposure_config: str | None,
     choices: list[str] | None,
-) -> list[tuple[str, str]] | list[tuple[int, str, str]]:
+) -> list[tuple[int, str, str]]:
     if args.mode == "aeb":
         current_index = read_aeb_current_index(args.gphoto, dry_run=args.dry_run)
         shots_to_take = shots_needed_to_finish_aeb_round(current_index)
@@ -133,6 +133,7 @@ def capture_single_round(
         return capture_aeb_round(
             args.gphoto,
             shots_to_take,
+            start_capture_order=current_index,
             dry_run=args.dry_run,
         )
 

@@ -8,6 +8,9 @@ from camera_timelapse.gphoto import GPhotoError, GPhotoShellSession, run_gphoto
 from camera_timelapse.parsing import camera_path
 
 
+CAPTURE_FILENAME_ORDER = (2, 3, 1)
+
+
 def next_group_number(output_dir: Path) -> int:
     highest = 0
     group_pattern = re.compile(r"^(\d{4})_")
@@ -23,9 +26,16 @@ def next_group_number(output_dir: Path) -> int:
     return highest + 1
 
 
-def destination_for_capture(output_dir: Path, group: int, index: int, camera_file: str) -> Path:
+def filename_index_for_capture_order(capture_order: int) -> int:
+    if 1 <= capture_order <= len(CAPTURE_FILENAME_ORDER):
+        return CAPTURE_FILENAME_ORDER[capture_order - 1]
+    return capture_order
+
+
+def destination_for_capture(output_dir: Path, group: int, capture_order: int, camera_file: str) -> Path:
     suffix = Path(camera_file).suffix or ".jpg"
-    return output_dir / f"{group:04d}_{index:02d}{suffix}"
+    filename_index = filename_index_for_capture_order(capture_order)
+    return output_dir / f"{group:04d}_{filename_index:02d}{suffix}"
 
 
 def download_camera_file(
